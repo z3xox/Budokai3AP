@@ -1,0 +1,150 @@
+from BaseClasses import Region, MultiWorld
+from .Locations import (
+    B3Location,
+    DU_BATTLE_LOCATIONS,
+    SHOP_LOCATIONS,
+    DU_COMPLETION_LOCATIONS,
+)
+
+# DU characters and which saga unlocks gate their later fights.
+# Format: character_name -> { saga_name -> [location names in that saga] }
+DU_CHARACTER_SAGAS = {
+    "Goku": {
+        "Saiyan":  ["Goku DU - Raditz", "Goku DU - Nappa", "Goku DU - Vegeta"],
+        "Frieza":  ["Goku DU - Recoome", "Goku DU - Ginyu",
+                    "Goku DU - Frieza Final Form", "Goku DU - Frieza 100%"],
+        "Cell":    ["Goku DU - Perfect Cell"],
+        "Buu":     ["Goku DU - Majin Vegeta", "Goku DU - Majin Buu",
+                    "Goku DU - Vegito vs Buuhan", "Goku DU - Super Buu (Inside Buu)",
+                    "Goku DU - Kid Buu"],
+    },
+    "Kid Gohan": {
+        "Saiyan":  ["Kid Gohan DU - Piccolo", "Kid Gohan DU - Saibaman",
+                    "Kid Gohan DU - Nappa"],
+        "Frieza":  ["Kid Gohan DU - Recoome", "Kid Gohan DU - First Form Frieza"],
+    },
+    "Teen Gohan": {
+        "Cell":    ["Teen Gohan DU - Piccolo", "Teen Gohan DU - Krillin",
+                    "Teen Gohan DU - Goku", "Teen Gohan DU - Perfect Cell",
+                    "Teen Gohan DU - Super Perfect Cell"],
+    },
+    "Adult Gohan": {
+        "Buu":     ["Adult Gohan DU - Goten", "Adult Gohan DU - Videl",
+                    "Adult Gohan DU - Dabura", "Adult Gohan DU - Majin Buu",
+                    "Adult Gohan DU - Super Buu"],
+    },
+    "Krillin": {
+        "Saiyan":  ["Krillin DU - Nappa", "Krillin DU - Saibaman"],
+        "Frieza":  ["Krillin DU - Recoome", "Krillin DU - Ginyu as Goku",
+                    "Krillin DU - Frieza Second Form", "Krillin DU - Frieza Final Form",
+                    "Krillin DU - Frieza Final Form (Ginyu)"],
+        "Cell":    ["Krillin DU - Perfect Cell"],
+    },
+    "Piccolo": {
+        "Saiyan":  ["Piccolo DU - Raditz (SBC)", "Piccolo DU - Kid Gohan",
+                    "Piccolo DU - Saibamen", "Piccolo DU - Goku",
+                    "Piccolo DU - Nappa", "Piccolo DU - Vegeta",
+                    "Piccolo DU - Raditz (Kame House)"],
+        "Frieza":  ["Piccolo DU - Frieza 2nd Form", "Piccolo DU - Frieza 3rd Form",
+                    "Piccolo DU - Frieza Final Form", "Piccolo DU - Cooler",
+                    "Piccolo DU - Metal Cooler"],
+        "Cell":    ["Piccolo DU - Dr. Gero", "Piccolo DU - Cell 1st Form",
+                    "Piccolo DU - Cell 1st Form (Baba)", "Piccolo DU - Perfect Cell",
+                    "Piccolo DU - Android 17"],
+        "Buu":     ["Piccolo DU - Dabura", "Piccolo DU - Super Buu",
+                    "Piccolo DU - Broly"],
+    },
+    "Tien": {
+        "Saiyan":  ["Tien DU - Saibamen", "Tien DU - Nappa"],
+        "Cell":    ["Tien DU - Cell 2nd Form", "Tien DU - Cell Jr."],
+        "Buu":     ["Tien DU - Super Buu (Gotenks)", "Tien DU - Super Buu (Gotenks/Chiaotzu)",
+                    "Tien DU - Yamcha"],
+    },
+    "Yamcha": {
+        "Saiyan":  ["Yamcha DU - Saibamen"],
+        "Cell":    ["Yamcha DU - Dr. Gero"],
+        "Buu":     ["Yamcha DU - Tien", "Yamcha DU - Vegeta"],
+    },
+    "Uub": {
+        "Buu":     ["Uub DU - Goku (WT)", "Uub DU - Majin Buu",
+                    "Uub DU - Vegeta & Goku", "Uub DU - Goku (Roshi)",
+                    "Uub DU - Omega Shenron"],
+    },
+    "Broly": {
+        "Buu":     ["Broly DU - Videl", "Broly DU - Kid Trunks",
+                    "Broly DU - Goten", "Broly DU - Gohan",
+                    "Broly DU - Gohan (WT post-game)", "Broly DU - Gohan (Rematch)",
+                    "Broly DU - Goku"],
+    },
+}
+
+SAGA_UNLOCK_ITEMS = {
+    "Frieza": "Frieza Saga Unlock",
+    "Cell":   "Cell Saga Unlock",
+    "Buu":    "Buu Saga Unlock",
+}
+
+CHARACTER_UNLOCK_ITEMS = {
+    "Goku":        "Goku DU",
+    "Kid Gohan":   "Kid Gohan DU",
+    "Teen Gohan":  "Teen Gohan DU",
+    "Adult Gohan": "Adult Gohan DU",
+    "Krillin":     "Krillin DU",
+    "Piccolo":     "Piccolo DU",
+    "Tien":        "Tien DU",
+    "Yamcha":      "Yamcha DU",
+    "Uub":         "Uub DU",
+    "Broly":       "Broly DU",
+}
+
+
+def create_regions(world):
+    multiworld = world.multiworld
+    player = world.player
+
+    # Menu region
+    menu = Region("Menu", player, multiworld)
+    multiworld.regions.append(menu)
+
+    # Shop region - always accessible
+    shop_region = Region("Shop", player, multiworld)
+    for name, loc_id in SHOP_LOCATIONS.items():
+        if loc_id is not None:
+            loc = B3Location(player, name, loc_id, shop_region)
+            shop_region.locations.append(loc)
+    multiworld.regions.append(shop_region)
+    menu.connect(shop_region)
+
+    # DU completion region - client sends these when the DU credits screen is reached.
+    du_complete_region = Region("DU Completions", player, multiworld)
+    for name, loc_id in DU_COMPLETION_LOCATIONS.items():
+        loc = B3Location(player, name, loc_id, du_complete_region)
+        du_complete_region.locations.append(loc)
+    multiworld.regions.append(du_complete_region)
+    menu.connect(du_complete_region)
+
+    # Create regions per character per saga
+    for char_name, sagas in DU_CHARACTER_SAGAS.items():
+        char_unlock = CHARACTER_UNLOCK_ITEMS.get(char_name)
+
+        for saga_name, locations in sagas.items():
+            region_name = f"{char_name} DU - {saga_name} Saga"
+            region = Region(region_name, player, multiworld)
+
+            for loc_name in locations:
+                if loc_name in DU_BATTLE_LOCATIONS:
+                    loc = B3Location(player, loc_name,
+                                     DU_BATTLE_LOCATIONS[loc_name], region)
+                    region.locations.append(loc)
+
+            multiworld.regions.append(region)
+
+            # Connect from menu with access rules
+            entrance = menu.connect(region, rule=lambda state,
+                                    cn=char_unlock, sn=saga_name: (
+                (cn is None or state.has(cn, player)) and
+                (sn == "Saiyan" or
+                 (sn == "Frieza" and state.has("Frieza Saga Unlock", player)) or
+                 (sn == "Cell"   and state.has("Cell Saga Unlock", player)) or
+                 (sn == "Buu"    and state.has("Buu Saga Unlock", player)))
+            ))
