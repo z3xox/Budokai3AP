@@ -178,10 +178,16 @@ DU_COMPLETION_BY_CHAR_ID = {
 
 # ─── Full location table ──────────────────────────────────────────────────────
 
+DRAGON_ARENA_LOCATIONS = {
+    f"Dragon Arena Fight {i+1}": B3_LOC_BASE + 0x700 + i
+    for i in range(380)
+}
+
 location_table = {}
 location_table.update(DU_BATTLE_LOCATIONS)
 location_table.update(SHOP_LOCATIONS)
 location_table.update(DU_COMPLETION_LOCATIONS)
+location_table.update(DRAGON_ARENA_LOCATIONS)
 
 def get_location_names():
     return {name: loc_id for name, loc_id in location_table.items()}

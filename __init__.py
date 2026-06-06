@@ -67,6 +67,16 @@ class B3World(World):
         for _ in range(restock_count):
             pool.append(create_item(self, "Shop Restock"))
 
+        # Dragon Arena: ticket + rank ups (one per 10 fights beyond the first 10)
+        da_fights = int(self.options.dragon_arena_fights.value)
+        if int(self.options.arenasanity.value):
+            da_fights = 380
+        if da_fights > 0:
+            pool.append(create_item(self, "Dragon Arena Ticket"))
+            rank_up_count = max(0, (da_fights - 1) // 10)
+            for _ in range(rank_up_count):
+                pool.append(create_item(self, "Dragon Arena Rank Up"))
+
         # Pad with capsule fillers + optional traps
         total_locs  = len(self.multiworld.get_unfilled_locations(self.player))
         total_items = len(pool)
@@ -120,6 +130,8 @@ class B3World(World):
             "shop_slots":         self.options.shop_slots.value,
             "drain_trap":         self.options.drain_trap.value,
             "required_du_completions": self.options.required_du_completions.value,
+            "dragon_arena_fights":     self.options.dragon_arena_fights.value,
+            "arenasanity":             self.options.arenasanity.value,
             "seed":               self.multiworld.seed_name,
             "starting_character": getattr(self, "starting_character", "Goku DU"),
         }

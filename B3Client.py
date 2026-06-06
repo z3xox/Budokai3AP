@@ -76,6 +76,13 @@ class B3Context(CommonContext):
 
         self.granted_skills: set = set()  # skills received from AP
 
+        # Dragon Arena state
+        self.da_ticket: bool = False         # has Dragon Arena Ticket
+        self.da_rank_ups: int = 0            # number of Rank Up items
+        self.da_fights_total: int = 0        # configured arena fight count
+        self.da_checks_sent: set = set()     # arena fight indices already sent
+        self._da_prev_clears: dict = {}      # index -> last clear flag
+
         # Shop state
         # The pool of capsules (from slot_data seed) — up to 50, shown 10 at a time
         self.shop_pool: list = []          # list of (display_idx, own_idx, name)
@@ -113,6 +120,11 @@ class B3Context(CommonContext):
         char_name = starting[:-3] if starting.endswith(" DU") else starting
         self.unlocked_characters = {char_name}
         logger.info(f"[B3] Starting character: {char_name}")
+
+        # Dragon Arena config
+        self.da_fights_total = int(self.slot_data.get("dragon_arena_fights", 0)) if self.slot_data else 0
+        if self.slot_data and int(self.slot_data.get("arenasanity", 0)):
+            self.da_fights_total = 380
 
         if self.connected_to_game:
             logger.info("[B3] AP server connected — building matchups and installing cave...")
@@ -168,6 +180,16 @@ class B3Context(CommonContext):
             self.granted_skills.add(skill_name)
             self.iface.grant_skill(skill_name)
             logger.info(f"[B3] Skill granted: {skill_name}")
+
+        elif name == "Dragon Arena Ticket":
+            self.da_ticket = True
+            self.iface.unlock_dragon_arena()
+            logger.info("[B3] Dragon Arena Ticket received — mode unlocked.")
+
+        elif name == "Dragon Arena Rank Up":
+            self.da_rank_ups += 1
+            logger.info(f"[B3] Dragon Arena Rank Up! Now {self.da_rank_ups} "
+                        f"({(self.da_rank_ups + 1) * 10} fights available)")
 
         elif name.startswith("Zenie"):
             amounts = {"Zenie x500": 500, "Zenie x1000": 1000, "Zenie x2000": 2000}
@@ -267,6 +289,45 @@ class B3Context(CommonContext):
         self.iface.write_shop_stock(entries)
         # Remember which pool indices are in which slot for purchase detection
         self._visible_pool_indices = [i for i, _e in visible]
+
+    def _handle_dragon_arena(self):
+        """Gate the arena opponent list and detect fight wins."""
+        if self.da_fights_total <= 0:
+            return
+
+        # Keep the ticket applied (lock if not received, unlock if received)
+        # Only touch ticket bytes on safe screens to avoid mid-battle writes.
+        screen = self.iface.get_screen()
+
+        # Clamp the visible opponent count. Must be set BEFORE the list builds,
+        # so we write it on the entrance screen (0x0617) as well as the list
+        # screen (0x0618). The list reads this count when it is constructed.
+        if screen in (0x0617, 0x0618):
+            allowed = min((self.da_rank_ups + 1) * 10, self.da_fights_total)
+            self.iface.clamp_da_opponent_count(allowed)
+
+        # Win detection: arena clear flags flip 0->1 when a fight is won.
+        # Only the first da_fights_total fights are AP checks.
+        # On first pass (prev unknown), an already-set flag counts as a win
+        # (Option B) so pre-cleared fights aren't permanently missed.
+        # Throttled to ~once per second — reading hundreds of flags every poll
+        # would lag (especially with arenasanity = 380 fights).
+        if screen in (0x0617, 0x0618, 0x0619, 0x061A, 0x061B):  # any arena screen
+            self._da_scan_counter = getattr(self, "_da_scan_counter", 0) + 1
+            if self._da_scan_counter >= 10:  # every ~1 second at 0.1s poll
+                self._da_scan_counter = 0
+                for idx in range(self.da_fights_total):
+                    if idx in self.da_checks_sent:
+                        continue
+                    flag = self.iface.read_da_clear_flag(idx)
+                    prev = self._da_prev_clears.get(idx, None)
+                    # Fire if newly cleared (0->1) OR already cleared on first sight
+                    if flag == 1 and (prev is None or prev == 0):
+                        self.da_checks_sent.add(idx)
+                        loc_name = f"Dragon Arena Fight {idx + 1}"
+                        asyncio.create_task(self._send_check(loc_name))
+                        logger.info(f"[B3] Dragon Arena win: {loc_name}")
+                    self._da_prev_clears[idx] = flag
 
     def _handle_shop(self):
         """
@@ -463,11 +524,20 @@ async def pcsx2_sync_task(ctx: B3Context):
                 scr = ctx.iface.get_screen()
                 if scr in (0x0108, 0x0016):
                     ctx.iface.apply_skill_locks(ctx.granted_skills)
+                    # Maintain Dragon Arena ticket lock state
+                    if ctx.da_fights_total > 0:
+                        if ctx.da_ticket:
+                            ctx.iface.unlock_dragon_arena()
+                        else:
+                            ctx.iface.lock_dragon_arena()
 
             # Handle shop
             if ctx.slot_data and not ctx.shop_pool:
                 ctx._build_shop_pool()
             ctx._handle_shop()
+
+            # Handle Dragon Arena
+            ctx._handle_dragon_arena()
 
             await asyncio.sleep(0.1)
 

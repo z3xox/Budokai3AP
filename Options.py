@@ -61,6 +61,23 @@ class RequiredDUCompletions(Range):
     default = 1
 
 
+class DragonArenaFights(Range):
+    """Number of Dragon Arena fights as AP checks (0 to disable Dragon Arena).
+    The arena shows 10 at a time; 'Dragon Arena Rank Up' items reveal more.
+    Max 380 (the full arena ladder). Ignored if Arenasanity is enabled."""
+    display_name = "Dragon Arena Fights"
+    range_start = 0
+    range_end = 380
+    default = 0
+
+
+class Arenasanity(Toggle):
+    """Add ALL 380 Dragon Arena fights as checks. Overrides Dragon Arena Fights
+    when enabled. Disabled by default."""
+    display_name = "Arenasanity"
+    default = 0
+
+
 @dataclass
 class B3Options(PerGameCommonOptions):
     randomize_fights: RandomizeFights
@@ -71,3 +88,5 @@ class B3Options(PerGameCommonOptions):
     shop_slots: ShopSlots
     drain_trap: DrainTrap
     required_du_completions: RequiredDUCompletions
+    dragon_arena_fights: DragonArenaFights
+    arenasanity: Arenasanity

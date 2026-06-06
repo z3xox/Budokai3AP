@@ -4,6 +4,7 @@ from .Locations import (
     DU_BATTLE_LOCATIONS,
     SHOP_LOCATIONS,
     DU_COMPLETION_LOCATIONS,
+    DRAGON_ARENA_LOCATIONS,
 )
 
 # DU characters and which saga unlocks gate their later fights.
@@ -143,6 +144,31 @@ def create_regions(world):
         shop_region.locations.append(loc)
     multiworld.regions.append(shop_region)
     menu.connect(shop_region)
+
+    # Dragon Arena region — gated by the ticket; fights revealed by Rank Ups
+    da_fights = 0
+    try:
+        da_fights = int(world.options.dragon_arena_fights.value)
+        if int(world.options.arenasanity.value):
+            da_fights = 380
+    except Exception:
+        pass
+    if da_fights > 0:
+        da_region = Region("Dragon Arena", player, multiworld)
+        da_items = list(DRAGON_ARENA_LOCATIONS.items())[:da_fights]
+        for slot_i, (name, loc_id) in enumerate(da_items):
+            loc = B3Location(player, name, loc_id, da_region)
+            # Every fight needs the ticket; fights past the first 10 need Rank Ups
+            rank_ups_needed = slot_i // 10
+            def make_rule(n):
+                if n == 0:
+                    return lambda state: state.has("Dragon Arena Ticket", player)
+                return lambda state: (state.has("Dragon Arena Ticket", player)
+                                      and state.has("Dragon Arena Rank Up", player, n))
+            loc.access_rule = make_rule(rank_ups_needed)
+            da_region.locations.append(loc)
+        multiworld.regions.append(da_region)
+        menu.connect(da_region)
 
     # DU completion region - client sends these when the DU credits screen is reached.
     du_complete_region = Region("DU Completions", player, multiworld)

@@ -543,3 +543,22 @@ SKILL_CAPSULES = {
     "Big Bang Attack (Vegeta)":       (0x4C6F64, 0x551118),
     "Galick Gun (Vegeta)":            (0x4C6F5F, 0x551113),
 }
+
+# ─── Dragon Arena ────────────────────────────────────────────────────────────
+SCREEN_DA_ENTRANCE = 0x0617
+SCREEN_DA_CHARSEL  = 0x0618  # fight/opponent select list
+SCREEN_DA_BATTLE   = 0x0619
+SCREEN_DA_RESULTS  = 0x061A
+SCREEN_DA_SAVE     = 0x061B
+
+# Dragon Arena Ticket (3 tables, like character/skill unlocks)
+DA_TICKET_DISPLAY   = 0x0049579D  # GHE display
+DA_TICKET_OWNERSHIP = 0x005512F1  # Real-Time ownership
+DA_TICKET_DU_RT     = 0x004C713D  # DU Real-Time
+
+# Opponent list count — clamp to gate how many arena fights are visible
+ADDR_DA_OPP_COUNT = 0x0089080C   # 32-bit; = 0x84 (132) at Lv.1-30 default
+
+# Arena clear flags: 1 byte per fight, 0x01 when cleared. Win detection.
+ADDR_DA_CLEAR_BASE = 0x00495A16  # Goku Lv.1
+DA_FIGHT_COUNT     = 380          # total arena fights (0x495A16 .. 0x495B91)

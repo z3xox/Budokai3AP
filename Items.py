@@ -56,6 +56,8 @@ TRAP_ITEMS = {
 
 SPECIAL_ITEMS = {
     "Shop Restock":  B3_BASE_ID + 0x300,
+    "Dragon Arena Ticket":   B3_BASE_ID + 0x301,
+    "Dragon Arena Rank Up":  B3_BASE_ID + 0x302,
 }
 
 # ─── Full item table ──────────────────────────────────────────────────────────
@@ -71,6 +73,8 @@ def get_item_classification(name: str) -> ItemClassification:
     if name in SAGA_ITEMS:
         return ItemClassification.progression
     if name in CHARACTER_ITEMS:
+        return ItemClassification.progression
+    if name == "Dragon Arena Ticket":
         return ItemClassification.progression
     if name in SPECIAL_ITEMS:
         return ItemClassification.useful

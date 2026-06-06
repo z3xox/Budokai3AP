@@ -23,6 +23,9 @@ from .data.Constants import (
     SHOP_OFF_DISPLAY, SHOP_OFF_RECEIVED, SHOP_OFF_PRICE, SHOP_OFF_FLAGS,
     SHOP_CAPSULE_POOL,
     SKILL_CAPSULES,
+    SCREEN_DA_CHARSEL, SCREEN_DA_BATTLE, SCREEN_DA_RESULTS,
+    DA_TICKET_DISPLAY, DA_TICKET_OWNERSHIP, DA_TICKET_DU_RT,
+    ADDR_DA_OPP_COUNT, ADDR_DA_CLEAR_BASE, DA_FIGHT_COUNT,
     OFFSET_BATTLE, OFFSET_SAGA, OFFSET_BATTLE_COMP,
     SCREEN_SHOP, SCREEN_WORLD_MAP, SCREEN_DU_BATTLE,
     SCREEN_RESULTS_WIN, SCREEN_SHENRON,
@@ -355,6 +358,7 @@ class B3Interface:
         self.logger = logger
         self._game_id: Optional[str] = None
         self._cave_installed = False
+        self._da_count_cache = None  # cached arena count address (per session)
         self._installed_cave_code = None
         self._prev_screen = -1
         self._prev_battle_states: dict = {}   # char_name → last battle state
@@ -575,6 +579,81 @@ class B3Interface:
             val = 0x01 if skill_name in granted else 0x00
             self.pine.write8(du_rt, val)
             self.pine.write8(rt, val)
+
+    # ── Dragon Arena ──────────────────────────────────────────────────────────
+
+    def unlock_dragon_arena(self):
+        """Write 1 to the 3 Dragon Arena Ticket tables to unlock the mode."""
+        self.pine.write8(DA_TICKET_DISPLAY, 0x01)
+        self.pine.write8(DA_TICKET_OWNERSHIP, 0x01)
+        self.pine.write8(DA_TICKET_DU_RT, 0x01)
+
+    def lock_dragon_arena(self):
+        """Write 0 to the 3 ticket tables to keep the mode locked."""
+        self.pine.write8(DA_TICKET_DISPLAY, 0x00)
+        self.pine.write8(DA_TICKET_OWNERSHIP, 0x00)
+        self.pine.write8(DA_TICKET_DU_RT, 0x00)
+
+    def get_da_screen_on_charsel(self) -> bool:
+        return self.get_screen() == SCREEN_DA_CHARSEL
+
+    def find_da_count_addr(self, use_cache=True):
+        """
+        Locate the live arena-list count dynamically. The struct is allocated
+        per-session and the magic's offset from the count is NOT constant, but
+        the 8-byte signature '03 00 FF FF 02 00 02 00' sits at a fixed offset:
+        count = signature_addr + 0x0C. Validated against a sane fight range.
+        The result is cached; the scan only reruns on a cache miss.
+        """
+        SIG0 = 0xFFFF0003  # little-endian read32 of bytes 03 00 FF FF
+        SIG1 = 0x00020002  # little-endian read32 of bytes 02 00 02 00
+
+        # 1) Validate the cached address first (cheap)
+        if use_cache and getattr(self, "_da_count_cache", None) is not None:
+            sig_addr = self._da_count_cache - 0x0C
+            try:
+                if (self.pine.read32(sig_addr) == SIG0
+                        and self.pine.read32(sig_addr + 4) == SIG1):
+                    cnt = self.pine.read32(self._da_count_cache)
+                    if 1 <= cnt <= 380:
+                        return self._da_count_cache
+            except Exception:
+                pass
+            self._da_count_cache = None
+
+        # 2) Scan for the signature. Count = signature + 0x0C.
+        scan_start = 0x00890000
+        scan_end   = 0x00895000
+        addr = scan_start
+        while addr < scan_end:
+            try:
+                if self.pine.read32(addr) == SIG0 and self.pine.read32(addr + 4) == SIG1:
+                    cnt_addr = addr + 0x0C
+                    cnt = self.pine.read32(cnt_addr)
+                    if 1 <= cnt <= 380:
+                        self._da_count_cache = cnt_addr
+                        return cnt_addr
+            except Exception:
+                pass
+            addr += 4
+        return None
+
+    def clamp_da_opponent_count(self, max_count: int):
+        """Clamp the arena opponent list count so only max_count fights show.
+        Locates the count dynamically (address varies per session) and caches it.
+        Only clamps DOWN — never raises above what the game has unlocked."""
+        cnt_addr = self.find_da_count_addr()
+        if cnt_addr is None:
+            return
+        try:
+            current = self.pine.read32(cnt_addr)
+        except Exception:
+            return
+        if current > max_count:
+            self.pine.write32(cnt_addr, max_count)
+
+    def read_da_clear_flag(self, index: int) -> int:
+        return self.pine.read8(ADDR_DA_CLEAR_BASE + index)
 
     def clear_shop(self):
         """Empty the shop (count = 0) — used when no AP capsules remain to sell."""

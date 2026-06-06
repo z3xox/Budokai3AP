@@ -28,11 +28,13 @@ Dragon Universe fights, the Skill Shop, character unlocks, and skill capsules be
 | `shop_slots` | 30 | Skill Shop checks (0–50); shows 10 at a time, more via Shop Restock |
 | `drain_trap` | false | Include HP Drain traps |
 | `required_du_completions` | 1 | DU campaigns needed to win (1–11) |
+| `dragon_arena_fights` | 0 | Dragon Arena fights (0–380) |
 
 ## Checks
 - **DU fights (~100)** — win a fight = a check (Goku, Vegeta, Piccolo, Krillin, Tien, Broly, the Gohans, Uub, Yamcha)
 - **Skill Shop (0–50)** — buy a capsule = a check; capsules are just triggers (not kept)
 - **DU completions** — finish a campaign
+- **Dragon Arena Fights** Up to 380 Checks
 
 ## Items
 - **Character unlocks (11)** — start with one random DU character, unlock the rest
@@ -45,7 +47,6 @@ Complete the required number of Dragon Universe campaigns.
 
 ## Known limitations
 - Saga lockout not implemented (all sagas open)
-- Dragon Arena not yet integrated
 - Some unlocks need one normal in-game save to persist into menus
 
 ## Troubleshooting
