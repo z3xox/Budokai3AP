@@ -6,8 +6,8 @@ GAME_CRC = "c97ef0a4"
 
 # ─── Cave ────────────────────────────────────────────────────────────────────
 ADDR_CAVE          = 0x00600000   # cave code start
-ADDR_DEBUG         = 0x00605000   # debug area (hit counter, mode, char, battle)
-ADDR_SCRATCH       = 0x00606000   # register save area (t0,t1,t2,t3)
+ADDR_DEBUG         = 0x00620000   # debug area (hit counter, mode, char, battle)
+ADDR_SCRATCH       = 0x00621000   # register save area (t0,t1,t2,t3)
 ADDR_INTERCEPT     = 0x001B32A8   # patched instruction
 ADDR_RETURN        = 0x001B32AC   # jump-back target
 CAVE_JUMP          = 0x08180000   # j 0x00600000
@@ -33,7 +33,7 @@ ADDR_STAGE_SELECT  = 0x0044B6F4
 ADDR_BATTLE_MOD    = 0x0044B708   # 0x00020003 = HP drain
 
 # ─── Shop ────────────────────────────────────────────────────────────────────
-ADDR_SHOP_COUNT    = 0x0088DE2C   # number of items (0-11)
+ADDR_SHOP_COUNT    = 0x0088DCEC   # number of items (confirmed, =0x0A when 10 shown)
 ADDR_SHOP_TABLE    = 0x0088DE3C   # item entries (20 bytes each)
 ADDR_CAPS_OWN_BASE = 0x005510C7   # capsule ownership array
 
@@ -155,6 +155,28 @@ FIGHT_LOCATIONS = {
     ("Broly", 0x05, 0x0C): "Broly DU - Gohan (WT post-game)",
     ("Broly", 0x05, 0x0F): "Broly DU - Gohan (Rematch)",
     ("Broly", 0x05, 0x12): "Broly DU - Goku",
+    # Vegeta DU
+    ("Vegeta", 0x05, 0x01): "Vegeta DU - Goku",
+    ("Vegeta", 0x05, 0x03): "Vegeta DU - Kid Gohan",
+    ("Vegeta", 0x01, 0x01): "Vegeta DU - Recoome",
+    ("Vegeta", 0x01, 0x03): "Vegeta DU - Frieza (1st Form)",
+    ("Vegeta", 0x01, 0x05): "Vegeta DU - Frieza (Final Form)",
+    ("Vegeta", 0x01, 0x07): "Vegeta DU - Cooler",
+    ("Vegeta", 0x02, 0x01): "Vegeta DU - Android 17",
+    ("Vegeta", 0x02, 0x03): "Vegeta DU - Android 18",
+    ("Vegeta", 0x02, 0x05): "Vegeta DU - Cell (17 Absorbed)",
+    ("Vegeta", 0x02, 0x07): "Vegeta DU - Cell (Perfect)",
+    ("Vegeta", 0x03, 0x01): "Vegeta DU - Goku (SS2)",
+    ("Vegeta", 0x03, 0x07): "Vegeta DU - Majin Buu",
+    ("Vegeta", 0x03, 0x0A): "Vegeta DU - Super Buu (Gohan Absorbed)",
+    ("Vegeta", 0x03, 0x0B): "Vegeta DU - Super Buu (Gohan Absorbed) [Supreme Kai]",
+    ("Vegeta", 0x03, 0x0E): "Vegeta DU - Super Buu (Inside Buu)",
+    ("Vegeta", 0x03, 0x0F): "Vegeta DU - Super Buu (Inside Buu) [Supreme Kai]",
+    ("Vegeta", 0x03, 0x11): "Vegeta DU - Kid Buu",
+    ("Vegeta", 0x03, 0x14): "Vegeta DU - Broly",
+    ("Vegeta", 0x03, 0x15): "Vegeta DU - Broly [Goku Friendship]",
+    ("Vegeta", 0x03, 0x17): "Vegeta DU - Gotenks (SS)",
+    ("Vegeta", 0x03, 0x19): "Vegeta DU - Goku (SS4)",
 }
 
 # ─── Roster ──────────────────────────────────────────────────────────────────
@@ -273,13 +295,13 @@ SCREEN_DU_TITLE   = 0x0106
 SCREEN_DU_CHARSEL = 0x0107
 
 # ─── Character Lock Cave ──────────────────────────────────────────────────────
-ADDR_CAVE2          = 0x005FED9C  # cave2 code; confirmed empty area before randomizer cave
-ADDR_LOCK_TABLE     = 0x00607000  # 11 bytes: 0=locked, 1=unlocked per character
-ADDR_LOCK_SCRATCH   = 0x00607080  # register save area for cave2
+ADDR_CAVE2          = 0x00623000  # cave2 code (safe, after lock table)
+ADDR_LOCK_TABLE     = 0x00622000  # 11 bytes: 0=locked, 1=unlocked per character
+ADDR_LOCK_SCRATCH   = 0x00622080  # register save area for cave2
 ADDR_INTERCEPT2     = 0x001F2B54  # original: lui at,0x0002
 ADDR_RETURN2        = 0x001F2B5C  # jump back target (skip delay slot)
 ORIG_INSTR2         = 0x3C010002  # lui at,0x0002
-CAVE2_JUMP          = 0x0817FB67  # j 0x005FED9C
+CAVE2_JUMP          = 0x08188C00  # j 0x00623000
 
 # Order matches ADDR_LOCK_TABLE indices
 LOCK_TABLE_CHARS = [
@@ -346,49 +368,178 @@ CAVE2_CODE_FULL = bytes([
 
 # Full cave2 code
 CAVE2_CODE = bytes([
-    0x02, 0x00, 0x01, 0x3C,  # lui at,0x0002       ; original instruction
-    0x60, 0x00, 0x0A, 0x3C,  # lui t2,0x0060
-    0x80, 0x70, 0x4A, 0x35,  # ori t2,t2,0x7080    ; t2 = scratch
-    0x00, 0x00, 0x08, 0xAD,  # sw t0,0(t2)
-    0x04, 0x00, 0x09, 0xAD,  # sw t1,4(t2)
-    0x60, 0x00, 0x08, 0x3C,  # lui t0,0x0060
-    0x00, 0x70, 0x08, 0x35,  # ori t0,t0,0x7000    ; lock table
-    0x00, 0x00, 0x09, 0x91,  # lbu t1,0(t0)        ; Goku
-    0x49, 0x00, 0x01, 0x3C,  # lui at,0x0049
-    0x62, 0x57, 0x29, 0xA0,  # sb t1,0x5762(at)
-    0x01, 0x00, 0x09, 0x91,  # lbu t1,1(t0)        ; Kid Gohan
+    0x02, 0x00, 0x01, 0x3C,
+    0x62, 0x00, 0x0A, 0x3C,
+    0x80, 0x20, 0x4A, 0x35,
+    0x00, 0x00, 0x48, 0xAD,
+    0x04, 0x00, 0x49, 0xAD,
+    0x62, 0x00, 0x08, 0x3C,
+    0x00, 0x20, 0x08, 0x35,
+    0x00, 0x00, 0x09, 0x91,
+    0x49, 0x00, 0x01, 0x3C,
+    0x62, 0x57, 0x29, 0xA0,
+    0x01, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x64, 0x57, 0x29, 0xA0,
-    0x02, 0x00, 0x09, 0x91,  # lbu t1,2(t0)        ; Teen Gohan
+    0x02, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x65, 0x57, 0x29, 0xA0,
-    0x03, 0x00, 0x09, 0x91,  # lbu t1,3(t0)        ; Adult Gohan
+    0x03, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x66, 0x57, 0x29, 0xA0,
-    0x04, 0x00, 0x09, 0x91,  # lbu t1,4(t0)        ; Vegeta
+    0x04, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x69, 0x57, 0x29, 0xA0,
-    0x05, 0x00, 0x09, 0x91,  # lbu t1,5(t0)        ; Krillin
+    0x05, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x6C, 0x57, 0x29, 0xA0,
-    0x06, 0x00, 0x09, 0x91,  # lbu t1,6(t0)        ; Piccolo
+    0x06, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x6D, 0x57, 0x29, 0xA0,
-    0x07, 0x00, 0x09, 0x91,  # lbu t1,7(t0)        ; Tien
+    0x07, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x6E, 0x57, 0x29, 0xA0,
-    0x08, 0x00, 0x09, 0x91,  # lbu t1,8(t0)        ; Yamcha
+    0x08, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x6F, 0x57, 0x29, 0xA0,
-    0x09, 0x00, 0x09, 0x91,  # lbu t1,9(t0)        ; Uub
+    0x09, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x73, 0x57, 0x29, 0xA0,
-    0x0A, 0x00, 0x09, 0x91,  # lbu t1,10(t0)       ; Broly
+    0x0A, 0x00, 0x09, 0x91,
     0x49, 0x00, 0x01, 0x3C,
     0x84, 0x57, 0x29, 0xA0,
-    0x00, 0x00, 0x08, 0x8D,  # lw t0,0(t2)         ; restore t0
-    0x04, 0x00, 0x09, 0x8D,  # lw t1,4(t2)         ; restore t1
-    0x02, 0x00, 0x01, 0x3C,  # lui at,0x0002       ; restore original at for 0x001F2B5C ori
-    0xD7, 0xCA, 0x07, 0x08,  # j 0x001F2B5C        ; jump back (delay slot at 0x1F2B58 already ran)
-    0x00, 0x00, 0x00, 0x00,  # nop
+    0x00, 0x00, 0x48, 0x8D,
+    0x04, 0x00, 0x49, 0x8D,
+    0x02, 0x00, 0x01, 0x3C,
+    0xD7, 0xCA, 0x07, 0x08,
+    0x00, 0x00, 0x00, 0x00,
 ])
+
+# ─── Shop System (confirmed) ─────────────────────────────────────────────────
+ADDR_SHOP_STRUCT_BASE = 0x0088DCFC  # item structs, 20 bytes each
+SHOP_STRUCT_SIZE      = 0x14         # 20 bytes per entry (confirmed: disp,recv,price,flags,extra)
+SHOP_DISPLAY_BASE     = 0x495599     # display_index = def_addr - this
+SHOP_OWNERSHIP_BASE   = 0x005510C7   # ownership: base + own_index
+SHOP_PRICE            = 1500
+SHOP_MAX_SLOTS        = 10
+
+# Shop entry struct offsets
+SHOP_OFF_DISPLAY  = 0x00   # display name index
+SHOP_OFF_RECEIVED = 0x04   # capsule received index
+SHOP_OFF_PRICE    = 0x08   # price (32-bit)
+SHOP_OFF_FLAGS    = 0x0C   # flags (0x02)
+
+# Shop capsule pool: (display_index, ownership_index, name)
+# Up to 50 capsules. Shop shows 10 at a time, restock items unlock more.
+SHOP_CAPSULE_POOL = [
+    (0x119, 0x13F, "Z-Sword"),
+    (0x11A, 0x140, "Juice!"),
+    (0x11B, 0x141, "Daimao's Power"),
+    (0x11C, 0x142, "Fruits of Training"),
+    (0x11D, 0x143, "Videl's Kiss"),
+    (0x11E, 0x144, "Kibito's Backing"),
+    (0x11F, 0x145, "Battle Testament"),
+    (0x120, 0x146, "Power Amplification System"),
+    (0x121, 0x147, "Warrior Genetics"),
+    (0x126, 0x14C, "Power of Friends"),
+    (0x128, 0x14E, "Strength Serum"),
+    (0x129, 0x14F, "King's Lineage"),
+    (0x12A, 0x150, "Cheering"),
+    (0x16E, 0x194, "Potential"),
+    (0x16F, 0x195, "Universal Power"),
+    (0x170, 0x196, "Miracle Power"),
+    (0x171, 0x197, "Ultimate Power"),
+    (0x174, 0x19A, "Saiyans' Awakening"),
+    (0x17A, 0x1A0, "Rage!"),
+    (0x17D, 0x1A3, "Spirit!"),
+    (0x180, 0x1A6, "Serious!"),
+    (0x183, 0x1A9, "Power Near the Limit"),
+    (0x186, 0x1AC, "Pride of the Strongest"),
+    (0x18A, 0x1B0, "Piccolo's Regeneration"),
+    (0x18C, 0x1B2, "Dende's Recovery"),
+    (0x18E, 0x1B4, "Medical Machine"),
+    (0x190, 0x1B6, "Saiyan Spirit"),
+    (0x191, 0x1B7, "Going All-out!!"),
+    (0x19E, 0x1C4, "Ki Control"),
+    (0x19F, 0x1C5, "Warrior's Career"),
+    (0x1A4, 0x1CA, "Meditation"),
+    (0x1A6, 0x1CC, "Angel's Halo"),
+    (0x1BA, 0x1E0, "Grandpa Gohan's Teachings"),
+    (0x1BB, 0x1E1, "Goku's Teachings"),
+    (0x1BC, 0x1E2, "Turtle Shell"),
+    (0x1BD, 0x1E3, "Concentration"),
+    (0x1BE, 0x1E4, "Sparking!"),
+    (0x1BF, 0x1E5, "Sparking!!"),
+    (0x1C0, 0x1E6, "Sparking!!!"),
+    (0x1C5, 0x1EB, "WE GOTTA POWER!"),
+    (0x14C, 0x172, "Special Coating"),
+    (0x14E, 0x174, "Nanomachine"),
+    (0x143, 0x169, "Champion's Belt"),
+    (0x145, 0x16B, "Black Belt Vest"),
+    (0x147, 0x16D, "Great Saiyaman's Wardrobe"),
+    (0x16B, 0x191, "Mixed Blood Power"),
+    (0x16C, 0x192, "Moon Light"),
+    (0x172, 0x198, "King's Confidence"),
+    (0x189, 0x1AF, "Dabura Cookie"),
+    (0x197, 0x1BD, "Babidi's Mind Control"),
+]
+
+# ─── Skill Capsules (grantable AP rewards) ───────────────────────────────────
+# Each skill: (DU_RT_address, RT_address). Writing 1 to both grants the skill
+# in both Dragon Universe and regular battle. RT = DU_RT + 0x8A1B4.
+SKILL_CAPSULES = {
+    "Breakthrough (Goku)":            (0x4C7008, 0x5511BC),
+    "Breakthrough (Kid Gohan)":       (0x4C700A, 0x5511BE),
+    "Breakthrough (Teen Gohan)":      (0x4C700B, 0x5511BF),
+    "Breakthrough (Gohan)":           (0x4C700C, 0x5511C0),
+    "Breakthrough (Vegeta)":          (0x4C700F, 0x5511C3),
+    "Breakthrough (Krillin)":         (0x4C7012, 0x5511C6),
+    "Breakthrough (Piccolo)":         (0x4C7013, 0x5511C7),
+    "Breakthrough (Tien)":            (0x4C7014, 0x5511C8),
+    "Breakthrough (Yamcha)":          (0x4C7015, 0x5511C9),
+    "Breakthrough (Uub)":             (0x4C7019, 0x5511CD),
+    "Breakthrough (Broly)":           (0x4C702A, 0x5511DE),
+    "Kaioken (Goku)":                 (0x4C6F3A, 0x5510EE),
+    "Super Saiyan (Goku)":            (0x4C6F3B, 0x5510EF),
+    "Super Saiyan 2 (Goku)":          (0x4C6F3C, 0x5510F0),
+    "Super Saiyan 3 (Goku)":          (0x4C6F3D, 0x5510F1),
+    "Super Saiyan 4 (Goku)":          (0x4C6F3E, 0x5510F2),
+    "Super Saiyan (Teen Gohan)":      (0x4C6F4B, 0x5510FF),
+    "Super Saiyan 2 (Teen Gohan)":    (0x4C6F4C, 0x551100),
+    "Super Saiyan (Gohan)":           (0x4C6F50, 0x551104),
+    "Super Saiyan 2 (Gohan)":         (0x4C6F51, 0x551105),
+    "Super Saiyan (Vegeta)":          (0x4C6F5C, 0x551110),
+    "Super Saiyan 2 (Vegeta)":        (0x4C6F5D, 0x551111),
+    "Super Saiyan 4 (Vegeta)":        (0x4C6F5E, 0x551112),
+    "Legendary Super Saiyan (Broly)": (0x4C6FC5, 0x551179),
+    "Fusion Gogeta (Goku)":           (0x4C6FE0, 0x551194),
+    "Fusion Gogeta (Vegeta)":         (0x4C6FE4, 0x551198),
+    "Fusion SSJ4 Gogeta (Goku)":      (0x4C6FE8, 0x55119C),
+    "Fusion SSJ4 Gogeta (Vegeta)":    (0x4C6FEE, 0x5511A2),
+    "Potara Vegito (Goku)":           (0x4C6FF4, 0x5511A8),
+    "Potara Vegito (Vegeta)":         (0x4C6FF9, 0x5511AD),
+    "Kamehameha (Goku)":              (0x4C6F3F, 0x5510F3),
+    "Kamehameha (Teen Gohan)":        (0x4C6F4D, 0x551101),
+    "Kamehameha (Gohan)":             (0x4C6F53, 0x551107),
+    "Kamehameha (Krillin)":           (0x4C6F6F, 0x551123),
+    "Kamehameha (Yamcha)":            (0x4C6F7B, 0x55112F),
+    "Spirit Bomb (Goku)":             (0x4C6F43, 0x5510F7),
+    "Final Flash (Vegeta)":           (0x4C6F63, 0x551117),
+    "Destructive Wave (Piccolo)":     (0x4C6F74, 0x551128),
+    "Wolf Fang Fist (Yamcha)":        (0x4C6F7C, 0x551130),
+    "Ki Blast Cannon (Tien)":         (0x4C6F79, 0x55112D),
+    "Final Impact (Vegeta)":          (0x4C6F61, 0x551115),
+    "Masenko (Kid Gohan)":            (0x4C6F4A, 0x5510FE),
+    "Gigantic Meteor (Broly)":        (0x4C6FC8, 0x55117C),
+    "Ki Cannon (Uub)":                (0x4C6F88, 0x55113C),
+    "Unlock Potential (Kid Gohan)":   (0x4C6F49, 0x5510FD),
+    "Unlock Potential (Krillin)":     (0x4C6F6E, 0x551122),
+    "Spirit Ball Attack (Yamcha)":    (0x4C6F7D, 0x551131),
+    "Special Beam Cannon (Piccolo)":  (0x4C6F76, 0x55112A),
+    "Hellzone Grenade (Piccolo)":     (0x4C6F77, 0x55112B),
+    "Sync With Nail (Piccolo)":       (0x4C6F72, 0x551126),
+    "Fuse With Kami (Piccolo)":       (0x4C6F73, 0x551127),
+    "Super Kamehameha (Gohan)":       (0x4C6F55, 0x551109),
+    "Big Bang Attack (Vegeta)":       (0x4C6F64, 0x551118),
+    "Galick Gun (Vegeta)":            (0x4C6F5F, 0x551113),
+}

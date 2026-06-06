@@ -18,7 +18,11 @@ from .data.Constants import (
     ADDR_P1_CHAR, ADDR_P1_CHAR_T4, ADDR_P1_CAPS,
     ADDR_P2_CHAR, ADDR_P2_CHAR_T4, ADDR_P2_CAPS,
     ADDR_STAGE_SELECT, ADDR_BATTLE_MOD,
-    ADDR_SHOP_COUNT, ADDR_SHOP_TABLE, ADDR_CAPS_OWN_BASE,
+    ADDR_SHOP_STRUCT_BASE, SHOP_STRUCT_SIZE, SHOP_DISPLAY_BASE,
+    SHOP_OWNERSHIP_BASE, SHOP_PRICE, SHOP_MAX_SLOTS, ADDR_SHOP_COUNT,
+    SHOP_OFF_DISPLAY, SHOP_OFF_RECEIVED, SHOP_OFF_PRICE, SHOP_OFF_FLAGS,
+    SHOP_CAPSULE_POOL,
+    SKILL_CAPSULES,
     OFFSET_BATTLE, OFFSET_SAGA, OFFSET_BATTLE_COMP,
     SCREEN_SHOP, SCREEN_WORLD_MAP, SCREEN_DU_BATTLE,
     SCREEN_RESULTS_WIN, SCREEN_SHENRON,
@@ -310,20 +314,22 @@ def build_cave(matchups: dict, randomize_stages: bool = True) -> bytes:
             a.write_word(ADDR_BATTLE_MOD, 0x00020003)
 
         # P1 character + clear template + Breakthrough block
-        a.write_word(ADDR_P1_CHAR,   p1["char"])
-        a.write_word(ADDR_P1_CHAR_T4, 0)
-        a.write_word(ADDR_P1_CAPS + 0x00, cap_word(p1["bt"]))
-        a.write_word(ADDR_P1_CAPS + 0x04, 0xFFFFFFFF)
-        a.write_word(ADDR_P1_CAPS + 0x08, 0xFFFFFFFF)
-        a.write_word(ADDR_P1_CAPS + 0x0C, 0xFFFFFFFF)
+        if data.get("write_p1", True):
+            a.write_word(ADDR_P1_CHAR,   p1["char"])
+            a.write_word(ADDR_P1_CHAR_T4, 0)
+            a.write_word(ADDR_P1_CAPS + 0x00, cap_word(p1["bt"]))
+            a.write_word(ADDR_P1_CAPS + 0x04, 0xFFFFFFFF)
+            a.write_word(ADDR_P1_CAPS + 0x08, 0xFFFFFFFF)
+            a.write_word(ADDR_P1_CAPS + 0x0C, 0xFFFFFFFF)
 
         # P2 character + clear template + Breakthrough block
-        a.write_word(ADDR_P2_CHAR,   p2["char"])
-        a.write_word(ADDR_P2_CHAR_T4, 0)
-        a.write_word(ADDR_P2_CAPS + 0x00, cap_word(p2["bt"]))
-        a.write_word(ADDR_P2_CAPS + 0x04, 0xFFFFFFFF)
-        a.write_word(ADDR_P2_CAPS + 0x08, 0xFFFFFFFF)
-        a.write_word(ADDR_P2_CAPS + 0x0C, 0xFFFFFFFF)
+        if data.get("write_p2", True):
+            a.write_word(ADDR_P2_CHAR,   p2["char"])
+            a.write_word(ADDR_P2_CHAR_T4, 0)
+            a.write_word(ADDR_P2_CAPS + 0x00, cap_word(p2["bt"]))
+            a.write_word(ADDR_P2_CAPS + 0x04, 0xFFFFFFFF)
+            a.write_word(ADDR_P2_CAPS + 0x08, 0xFFFFFFFF)
+            a.write_word(ADDR_P2_CAPS + 0x0C, 0xFFFFFFFF)
 
         a.beq("zero", "zero", "return")
         a.emit(_nop())
@@ -349,6 +355,7 @@ class B3Interface:
         self.logger = logger
         self._game_id: Optional[str] = None
         self._cave_installed = False
+        self._installed_cave_code = None
         self._prev_screen = -1
         self._prev_battle_states: dict = {}   # char_name → last battle state
         self._prev_ownership: Optional[bytes] = None
@@ -389,7 +396,21 @@ class B3Interface:
 
     def cave_installed(self) -> bool:
         try:
-            return self.pine.read32(ADDR_INTERCEPT) == CAVE_JUMP
+            # Verify the jump is intact
+            if self.pine.read32(ADDR_INTERCEPT) != CAVE_JUMP:
+                return False
+            # Verify the cave code is intact (check first + last words)
+            code = getattr(self, "_installed_cave_code", None)
+            if code is None or len(code) < 4:
+                # No stored code — fall back to checking first instruction
+                return self.pine.read32(ADDR_CAVE) == ORIG_INSTR
+            first_expected = int.from_bytes(code[0:4], "little")
+            last_expected  = int.from_bytes(code[-4:], "little")
+            if self.pine.read32(ADDR_CAVE) != first_expected:
+                return False
+            if self.pine.read32(ADDR_CAVE + len(code) - 4) != last_expected:
+                return False
+            return True
         except Exception:
             return False
 
@@ -403,6 +424,7 @@ class B3Interface:
         if cave_end > ADDR_SCRATCH:
             self.logger.error(f"[B3] Cave overlaps scratch area! End=0x{cave_end:08X}")
             return
+        self._installed_cave_code = cave_code  # store for integrity check
         self.pine.write_bytes(ADDR_CAVE, cave_code)
         self.pine.write32(ADDR_INTERCEPT, CAVE_JUMP)
         self._cave_installed = self.cave_installed()
@@ -511,34 +533,64 @@ class B3Interface:
     def is_shop_open(self) -> bool:
         return self.get_screen() == SCREEN_SHOP
 
-    def write_shop_stock(self, items: list):
+    def write_shop_stock(self, pool_entries: list):
         """
-        Write AP-controlled shop stock.
-        items: list of up to 10 capsule shop indices (from CAPSULE_SHOP_IDS)
+        Write AP-controlled shop stock to the item structs at 0x0088DCFC.
+        pool_entries: list of up to 10 (display_index, ownership_index, name) tuples.
+        Writes display index, received index, price, and flags for each slot,
+        and locks the shop count so items don't accumulate across visits.
         """
-        count = min(len(items), 10)
+        count = min(len(pool_entries), SHOP_MAX_SLOTS)
+        for i in range(count):
+            disp_idx, _own_idx, _name = pool_entries[i]
+            entry = ADDR_SHOP_STRUCT_BASE + i * SHOP_STRUCT_SIZE
+            self.pine.write32(entry + SHOP_OFF_DISPLAY,  disp_idx)
+            self.pine.write32(entry + SHOP_OFF_RECEIVED, disp_idx)
+            self.pine.write32(entry + SHOP_OFF_PRICE,    SHOP_PRICE)
+            self.pine.write32(entry + SHOP_OFF_FLAGS,    0x02)
+        # Lock the item count so the game doesn't accumulate items each visit
         self.pine.write32(ADDR_SHOP_COUNT, count)
-        for i, idx in enumerate(items[:10]):
-            entry_base = ADDR_SHOP_TABLE + i * 20
-            self.pine.write32(entry_base + 0x00, idx)    # display name
-            self.pine.write32(entry_base + 0x04, 1500)   # price
-            self.pine.write32(entry_base + 0x08, idx)    # capsule received
-            self.pine.write32(entry_base + 0x0C, 0x02)   # flags
 
-    def snapshot_ownership(self) -> bytes:
-        """Read 512 bytes of capsule ownership array."""
-        data = b""
-        for i in range(0, 512, 4):
-            data += self.pine.read32(ADDR_CAPS_OWN_BASE + i).to_bytes(4, "little")
-        return data
+    def grant_skill(self, skill_name: str):
+        """Grant a skill capsule by writing 1 to its DU-RT and RT addresses."""
+        entry = SKILL_CAPSULES.get(skill_name)
+        if not entry:
+            return
+        du_rt, rt = entry
+        self.pine.write8(du_rt, 0x01)
+        self.pine.write8(rt, 0x01)
 
-    def diff_ownership(self, before: bytes, after: bytes) -> list:
-        """Return list of capsule indices that flipped 0→1."""
-        changed = []
-        for i in range(min(len(before), len(after))):
-            if before[i] == 0x00 and after[i] == 0x01:
-                changed.append(i)
-        return changed
+    def reapply_skills(self, skills: set):
+        """Re-grant all received skills (handles load resets)."""
+        for skill_name in skills:
+            self.grant_skill(skill_name)
+
+    def apply_skill_locks(self, granted: set):
+        """
+        Write the full skill lock state: 1 for AP-granted skills, 0 for all
+        others. This gates skills so the player can only obtain them via AP,
+        suppressing natural in-game unlocks. Call only on DU world map / shop.
+        """
+        for skill_name, (du_rt, rt) in SKILL_CAPSULES.items():
+            val = 0x01 if skill_name in granted else 0x00
+            self.pine.write8(du_rt, val)
+            self.pine.write8(rt, val)
+
+    def clear_shop(self):
+        """Empty the shop (count = 0) — used when no AP capsules remain to sell."""
+        self.pine.write32(ADDR_SHOP_COUNT, 0)
+
+    def read_capsule_owned(self, ownership_index: int) -> int:
+        """Read whether a capsule is owned (1) or not (0)."""
+        return self.pine.read8(SHOP_OWNERSHIP_BASE + ownership_index)
+
+    def read_shop_slot0_display(self) -> int:
+        """Read the display index of shop slot 0 (to detect game repopulation)."""
+        return self.pine.read32(ADDR_SHOP_STRUCT_BASE + SHOP_OFF_DISPLAY)
+
+    def clear_capsule_owned(self, ownership_index: int):
+        """Reset ownership to 0 — we use capsules as AP triggers, player doesn't keep them."""
+        self.pine.write8(SHOP_OWNERSHIP_BASE + ownership_index, 0x00)
 
     # ── Saga lockout ─────────────────────────────────────────────────────────
 

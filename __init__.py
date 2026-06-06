@@ -61,6 +61,12 @@ class B3World(World):
         for name in CHARACTER_UNLOCK_ITEMS.values():
             pool.append(create_item(self, name))
 
+        # Shop Restock items — one per 10 shop slots beyond the first 10
+        shop_slots = int(self.options.shop_slots.value)
+        restock_count = max(0, (shop_slots - 1) // 10)  # slots 11-20 ->1, 21-30 ->2, etc.
+        for _ in range(restock_count):
+            pool.append(create_item(self, "Shop Restock"))
+
         # Pad with capsule fillers + optional traps
         total_locs  = len(self.multiworld.get_unfilled_locations(self.player))
         total_items = len(pool)
@@ -107,6 +113,8 @@ class B3World(World):
     def fill_slot_data(self) -> Mapping[str, Any]:
         return {
             "randomize_fights":   self.options.randomize_fights.value,
+            "randomize_player1":  self.options.randomize_player1.value,
+            "randomize_player2":  self.options.randomize_player2.value,
             "randomize_stages":   self.options.randomize_stages.value,
             "starting_saga":      self.options.starting_saga.value,
             "shop_slots":         self.options.shop_slots.value,

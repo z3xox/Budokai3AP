@@ -74,10 +74,14 @@ class B3Context(CommonContext):
         self.unlocked_characters: set = set()  # populated from slot_data on connect
         self._prev_screen_for_locks: int = -1
 
+        self.granted_skills: set = set()  # skills received from AP
+
         # Shop state
-        self.shop_stock: list = []     # capsule indices for shop slots
-        self.shop_purchases_sent: set = set()  # location names already sent
-        self._prev_ownership: Optional[bytes] = None
+        # The pool of capsules (from slot_data seed) — up to 50, shown 10 at a time
+        self.shop_pool: list = []          # list of (display_idx, own_idx, name)
+        self.restocks_received: int = 0    # number of "Shop Restock" items received
+        self.shop_purchased: set = set()   # pool indices already bought (by position)
+        self.shop_checks_sent: set = set() # location names already sent
         self._shop_was_open: bool = False
 
         # Received items state
@@ -113,6 +117,7 @@ class B3Context(CommonContext):
         if self.connected_to_game:
             logger.info("[B3] AP server connected — building matchups and installing cave...")
             self._build_matchups()
+            self._build_shop_pool()
             if not self.iface.any_fight_loading():
                 self.install_cave()
             else:
@@ -151,14 +156,18 @@ class B3Context(CommonContext):
             self.iface.show_character(char)
             logger.info(f"[B3] DU unlocked: {char}")
 
-        elif name.startswith("Capsule: "):
-            # Add to shop stock
-            if name in CAPSULE_SHOP_IDS:
-                idx = CAPSULE_SHOP_IDS[name]
-                if idx not in self.shop_stock:
-                    self.shop_stock.append(idx)
-                if self.iface.is_shop_open():
-                    self.iface.write_shop_stock(self.shop_stock)
+        elif name == "Shop Restock":
+            self.restocks_received = min(self.restocks_received + 1, 4)
+            logger.info(f"[B3] Shop Restock received! Now {self.restocks_received} restocks "
+                        f"({(self.restocks_received + 1) * 10} capsules unlocked)")
+            if self.iface.is_shop_open():
+                self._refresh_shop()
+
+        elif name.startswith("Skill: "):
+            skill_name = name[len("Skill: "):]
+            self.granted_skills.add(skill_name)
+            self.iface.grant_skill(skill_name)
+            logger.info(f"[B3] Skill granted: {skill_name}")
 
         elif name.startswith("Zenie"):
             amounts = {"Zenie x500": 500, "Zenie x1000": 1000, "Zenie x2000": 2000}
@@ -173,7 +182,7 @@ class B3Context(CommonContext):
     def _build_matchups(self):
         """
         Build fight matchups from slot data.
-        If slot_data has a seed, use it for deterministic randomization.
+        Respects randomize_fights (master), randomize_player1, randomize_player2.
         """
         seed = self.slot_data.get("seed") if self.slot_data else None
         rng = random.Random(seed)
@@ -181,6 +190,13 @@ class B3Context(CommonContext):
         stage_ids = list(STAGES.values())
         drain_trap = bool(self.slot_data.get("drain_trap", 0)) if self.slot_data else False
         randomize_stages = bool(self.slot_data.get("randomize_stages", 1)) if self.slot_data else True
+
+        master = bool(self.slot_data.get("randomize_fights", 1)) if self.slot_data else True
+        rand_p1 = bool(self.slot_data.get("randomize_player1", 0)) if self.slot_data else False
+        rand_p2 = bool(self.slot_data.get("randomize_player2", 1)) if self.slot_data else True
+        # Master toggle gates both
+        rand_p1 = rand_p1 and master
+        rand_p2 = rand_p2 and master
 
         self.matchups = {}
         for key in FIGHT_LOCATIONS:
@@ -199,14 +215,23 @@ class B3Context(CommonContext):
                 "p2": {"char": p2_char, "bt": p2_bt, "name": p2_name},
                 "stage_id": stage_id,
                 "drain": drain,
+                "write_p1": rand_p1,
+                "write_p2": rand_p2,
             }
 
-        logger.info(f"[B3] Built {len(self.matchups)} fight matchups")
+        # If nothing is randomized (no P1, no P2, no stages, no drain), skip cave entirely
+        self._cave_needed = rand_p1 or rand_p2 or randomize_stages or drain_trap
+        logger.info(f"[B3] Built {len(self.matchups)} matchups "
+                    f"(P1={rand_p1}, P2={rand_p2}, stages={randomize_stages})")
 
     def install_cave(self):
         """Build and install the MIPS code cave."""
         if not self.matchups:
             self._build_matchups()
+        # If nothing needs randomizing, don't install the cave at all
+        if not getattr(self, "_cave_needed", True):
+            logger.info("[B3] No randomization enabled — skipping fight cave.")
+            return
         randomize_stages = bool(self.slot_data.get("randomize_stages", 1)) if self.slot_data else True
         cave_code = build_cave(self.matchups, randomize_stages=randomize_stages)
         self.iface.install_cave(cave_code)
@@ -214,29 +239,98 @@ class B3Context(CommonContext):
 
     # ── Shop ─────────────────────────────────────────────────────────────────
 
+    def _build_shop_pool(self):
+        """Build the shop capsule pool. Uses the FIXED pool order so the AP
+        location names (Shop: <capsule>) match the in-game shop slot contents,
+        making hints meaningful. No per-seed shuffle — the capsules are just
+        AP check triggers, so a fixed order loses nothing."""
+        from .data.Constants import SHOP_CAPSULE_POOL
+        shop_slots = self.slot_data.get("shop_slots", 50) if self.slot_data else 50
+        self.shop_pool = list(SHOP_CAPSULE_POOL)[:shop_slots]
+        logger.info(f"[B3] Shop pool built: {len(self.shop_pool)} capsules (fixed order)")
+
+    def _visible_shop_entries(self):
+        """
+        Return the up-to-10 capsules currently shown in the shop:
+        the first 10 unpurchased capsules from the unlocked portion of the pool.
+        Unlocked size = (restocks + 1) * 10.
+        """
+        unlocked_size = (self.restocks_received + 1) * 10
+        available = [(i, entry) for i, entry in enumerate(self.shop_pool[:unlocked_size])
+                     if i not in self.shop_purchased]
+        return available[:10]   # list of (pool_index, (disp, own, name))
+
+    def _refresh_shop(self):
+        """Write the current visible shop entries to game memory."""
+        visible = self._visible_shop_entries()
+        entries = [entry for _i, entry in visible]
+        self.iface.write_shop_stock(entries)
+        # Remember which pool indices are in which slot for purchase detection
+        self._visible_pool_indices = [i for i, _e in visible]
+
     def _handle_shop(self):
-        """Detect shop open/close and send purchase checks."""
-        shop_open = self.iface.is_shop_open()
+        """
+        Detect shop open/refresh and purchases; rotate stock.
 
-        if shop_open and not self._shop_was_open:
-            # Shop just opened — write AP stock
-            if self.shop_stock:
-                self.iface.write_shop_stock(self.shop_stock)
-            self._prev_ownership = self.iface.snapshot_ownership()
+        The Skill Shop keeps screen ID 0x0016 but repopulates the item struct
+        at 0x0088DCFC with random capsules each time it opens. We detect that
+        repopulation (slot 0 display index differs from what we wrote) and
+        immediately overwrite with our AP stock.
+        """
+        if not self.shop_pool:
+            return
 
-        elif not shop_open and self._shop_was_open:
-            # Shop just closed — check for purchases
-            if self._prev_ownership:
-                after = self.iface.snapshot_ownership()
-                changed = self.iface.diff_ownership(self._prev_ownership, after)
-                for idx in changed:
-                    loc_name = f"Shop Slot {self.shop_stock.index(idx) + 1}" \
-                               if idx in self.shop_stock else None
-                    if loc_name and loc_name not in self.shop_purchases_sent:
-                        self.shop_purchases_sent.add(loc_name)
-                        asyncio.create_task(self._send_check(loc_name))
+        on_shop_screen = self.iface.is_shop_open()  # 0x0016 (skill menu/shop)
 
-        self._shop_was_open = shop_open
+        if not on_shop_screen:
+            self._shop_was_open = False
+            self._last_written_slot0 = None
+            return
+
+        # Log once when entering shop
+        if not self._shop_was_open:
+            slot0 = self.iface.read_shop_slot0_display()
+            logger.info(f"[B3] Shop screen detected (0x0016). Slot0 display=0x{slot0:X}, "
+                        f"pool={len(self.shop_pool)}, restocks={self.restocks_received}")
+
+        # We're on the skill menu/shop screen. Check if the game repopulated
+        # the struct with its own random stock (our write got overwritten).
+        visible = self._visible_shop_entries()
+        if not visible:
+            # No capsules left to sell (all bought, awaiting a restock) — empty the shop
+            self.iface.clear_shop()
+            self._shop_was_open = True
+            return
+
+        expected_slot0 = visible[0][1][0]  # display index we want in slot 0
+        actual_slot0 = self.iface.read_shop_slot0_display()
+
+        last_written = getattr(self, "_last_written_slot0", None)
+
+        if actual_slot0 != expected_slot0 and actual_slot0 != last_written:
+            # Game repopulated the shop — overwrite with our stock
+            self._refresh_shop()
+            self._last_written_slot0 = expected_slot0
+
+        # Watch for purchases via ownership flips
+        vis_indices = getattr(self, "_visible_pool_indices", [])
+        for pool_idx in list(vis_indices):
+            if pool_idx in self.shop_purchased:
+                continue
+            _disp, own_idx, name = self.shop_pool[pool_idx]
+            if self.iface.read_capsule_owned(own_idx) == 0x01:
+                self.iface.clear_capsule_owned(own_idx)
+                self.shop_purchased.add(pool_idx)
+                loc_name = f"Shop: {name}"
+                if loc_name not in self.shop_checks_sent:
+                    self.shop_checks_sent.add(loc_name)
+                    asyncio.create_task(self._send_check(loc_name))
+                    logger.info(f"[B3] Shop purchase: {name} -> {loc_name}")
+                self._refresh_shop()
+                self._last_written_slot0 = self._visible_shop_entries()[0][1][0] \
+                    if self._visible_shop_entries() else None
+
+        self._shop_was_open = True
 
     async def _send_check(self, location_name: str):
         """Send a location check to the AP server."""
@@ -305,6 +399,8 @@ async def pcsx2_sync_task(ctx: B3Context):
                     # Build matchups only if already connected to AP server
                     if ctx.slot_data:
                         ctx._build_matchups()
+                        if not ctx.shop_pool:
+                            ctx._build_shop_pool()
                         if not ctx.iface.any_fight_loading():
                             ctx.install_cave()
                         # Important: if AP connects before PCSX2, cave2 was never installed.
@@ -321,7 +417,9 @@ async def pcsx2_sync_task(ctx: B3Context):
                     continue
 
             # Reinstall cave if it got wiped — only when no fight is loading
-            if not ctx.iface.cave_installed() and ctx.matchups and not ctx.cave_paused:
+            # and randomization is actually enabled
+            if (not ctx.iface.cave_installed() and ctx.matchups and not ctx.cave_paused
+                    and getattr(ctx, "_cave_needed", True)):
                 if not ctx.iface.any_fight_loading():
                     logger.info("[B3] Cave missing, reinstalling...")
                     ctx.install_cave()
@@ -361,8 +459,14 @@ async def pcsx2_sync_task(ctx: B3Context):
             if ctx._lock_reapply_counter >= 50:  # every ~5 seconds
                 ctx._lock_reapply_counter = 0
                 ctx.iface.apply_character_locks(ctx.unlocked_characters)
+                # Gate skills: only on DU world map (0x0108) or shop (0x0016)
+                scr = ctx.iface.get_screen()
+                if scr in (0x0108, 0x0016):
+                    ctx.iface.apply_skill_locks(ctx.granted_skills)
 
             # Handle shop
+            if ctx.slot_data and not ctx.shop_pool:
+                ctx._build_shop_pool()
             ctx._handle_shop()
 
             await asyncio.sleep(0.1)

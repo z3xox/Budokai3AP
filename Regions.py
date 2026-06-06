@@ -33,6 +33,21 @@ DU_CHARACTER_SAGAS = {
                     "Adult Gohan DU - Dabura", "Adult Gohan DU - Majin Buu",
                     "Adult Gohan DU - Super Buu"],
     },
+    "Vegeta": {
+        "Saiyan":  ["Vegeta DU - Goku", "Vegeta DU - Kid Gohan"],
+        "Frieza":  ["Vegeta DU - Recoome", "Vegeta DU - Frieza (1st Form)",
+                    "Vegeta DU - Frieza (Final Form)", "Vegeta DU - Cooler"],
+        "Cell":    ["Vegeta DU - Android 17", "Vegeta DU - Android 18",
+                    "Vegeta DU - Cell (17 Absorbed)", "Vegeta DU - Cell (Perfect)"],
+        "Buu":     ["Vegeta DU - Goku (SS2)", "Vegeta DU - Majin Buu",
+                    "Vegeta DU - Super Buu (Gohan Absorbed)",
+                    "Vegeta DU - Super Buu (Gohan Absorbed) [Supreme Kai]",
+                    "Vegeta DU - Super Buu (Inside Buu)",
+                    "Vegeta DU - Super Buu (Inside Buu) [Supreme Kai]",
+                    "Vegeta DU - Kid Buu", "Vegeta DU - Broly",
+                    "Vegeta DU - Broly [Goku Friendship]",
+                    "Vegeta DU - Gotenks (SS)", "Vegeta DU - Goku (SS4)"],
+    },
     "Krillin": {
         "Saiyan":  ["Krillin DU - Nappa", "Krillin DU - Saibaman"],
         "Frieza":  ["Krillin DU - Recoome", "Krillin DU - Ginyu as Goku",
@@ -89,6 +104,7 @@ CHARACTER_UNLOCK_ITEMS = {
     "Kid Gohan":   "Kid Gohan DU",
     "Teen Gohan":  "Teen Gohan DU",
     "Adult Gohan": "Adult Gohan DU",
+    "Vegeta":      "Vegeta DU",
     "Krillin":     "Krillin DU",
     "Piccolo":     "Piccolo DU",
     "Tien":        "Tien DU",
@@ -106,12 +122,25 @@ def create_regions(world):
     menu = Region("Menu", player, multiworld)
     multiworld.regions.append(menu)
 
-    # Shop region - always accessible
+    # Shop region - always accessible. Slots beyond the first 10 require
+    # "Shop Restock" items (each restock unlocks the next 10 capsules).
+    shop_slots = 50
+    try:
+        shop_slots = int(world.options.shop_slots.value)
+    except Exception:
+        pass
     shop_region = Region("Shop", player, multiworld)
-    for name, loc_id in SHOP_LOCATIONS.items():
-        if loc_id is not None:
-            loc = B3Location(player, name, loc_id, shop_region)
-            shop_region.locations.append(loc)
+    shop_items = list(SHOP_LOCATIONS.items())[:shop_slots]
+    for slot_i, (name, loc_id) in enumerate(shop_items):
+        if loc_id is None:
+            continue
+        loc = B3Location(player, name, loc_id, shop_region)
+        # Slot index 0-9 = always available; 10-19 need 1 restock; 20-29 need 2; etc.
+        restocks_needed = slot_i // 10
+        if restocks_needed > 0:
+            loc.access_rule = (lambda state, n=restocks_needed:
+                               state.has("Shop Restock", player, n))
+        shop_region.locations.append(loc)
     multiworld.regions.append(shop_region)
     menu.connect(shop_region)
 

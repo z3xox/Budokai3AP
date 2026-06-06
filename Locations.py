@@ -110,14 +110,38 @@ DU_BATTLE_LOCATIONS = {
     "Broly DU - Gohan (WT post-game)":          B3_LOC_BASE + 0x124,
     "Broly DU - Gohan (Rematch)":               B3_LOC_BASE + 0x125,
     "Broly DU - Goku":                          B3_LOC_BASE + 0x126,
+    # Vegeta DU
+    "Vegeta DU - Goku":                                          B3_LOC_BASE + 0x140,
+    "Vegeta DU - Kid Gohan":                                     B3_LOC_BASE + 0x141,
+    "Vegeta DU - Recoome":                                       B3_LOC_BASE + 0x142,
+    "Vegeta DU - Frieza (1st Form)":                             B3_LOC_BASE + 0x143,
+    "Vegeta DU - Frieza (Final Form)":                           B3_LOC_BASE + 0x144,
+    "Vegeta DU - Cooler":                                        B3_LOC_BASE + 0x145,
+    "Vegeta DU - Android 17":                                    B3_LOC_BASE + 0x146,
+    "Vegeta DU - Android 18":                                    B3_LOC_BASE + 0x147,
+    "Vegeta DU - Cell (17 Absorbed)":                            B3_LOC_BASE + 0x148,
+    "Vegeta DU - Cell (Perfect)":                                B3_LOC_BASE + 0x149,
+    "Vegeta DU - Goku (SS2)":                                    B3_LOC_BASE + 0x14A,
+    "Vegeta DU - Majin Buu":                                     B3_LOC_BASE + 0x14B,
+    "Vegeta DU - Super Buu (Gohan Absorbed)":                    B3_LOC_BASE + 0x14C,
+    "Vegeta DU - Super Buu (Gohan Absorbed) [Supreme Kai]":      B3_LOC_BASE + 0x14D,
+    "Vegeta DU - Super Buu (Inside Buu)":                        B3_LOC_BASE + 0x14E,
+    "Vegeta DU - Super Buu (Inside Buu) [Supreme Kai]":          B3_LOC_BASE + 0x14F,
+    "Vegeta DU - Kid Buu":                                       B3_LOC_BASE + 0x150,
+    "Vegeta DU - Broly":                                         B3_LOC_BASE + 0x151,
+    "Vegeta DU - Broly [Goku Friendship]":                       B3_LOC_BASE + 0x152,
+    "Vegeta DU - Gotenks (SS)":                                  B3_LOC_BASE + 0x153,
+    "Vegeta DU - Goku (SS4)":                                    B3_LOC_BASE + 0x154,
 }
 
 # ─── Shop Locations ───────────────────────────────────────────────────────────
 # 10 shop slots, AP controls the stock.
 
+from .data.Constants import SHOP_CAPSULE_POOL
+
 SHOP_LOCATIONS = {
-    f"Shop Slot {i+1}": B3_LOC_BASE + 0x500 + i
-    for i in range(10)
+    f"Shop: {SHOP_CAPSULE_POOL[i][2]}": B3_LOC_BASE + 0x500 + i
+    for i in range(len(SHOP_CAPSULE_POOL))
 }
 
 

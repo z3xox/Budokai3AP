@@ -3,8 +3,23 @@ from Options import Toggle, Choice, Range, PerGameCommonOptions
 
 
 class RandomizeFights(Toggle):
-    """Randomize enemy characters in Dragon Universe fights."""
+    """Master toggle for randomizing Dragon Universe fights. If off, no fight
+    randomization happens regardless of the per-player toggles below."""
     display_name = "Randomize Fights"
+    default = 1
+
+
+class RandomizePlayer1(Toggle):
+    """Randomize the player-controlled character (P1) in DU fights.
+    Only applies when Randomize Fights is on."""
+    display_name = "Randomize Player 1"
+    default = 0
+
+
+class RandomizePlayer2(Toggle):
+    """Randomize the opponent character (P2) in DU fights.
+    Only applies when Randomize Fights is on."""
+    display_name = "Randomize Player 2"
     default = 1
 
 
@@ -25,11 +40,11 @@ class StartingSaga(Choice):
 
 
 class ShopSlots(Range):
-    """Number of AP-controlled shop slots (0 to disable shop locations)."""
+    """Number of AP shop capsule locations (0 to disable). Shop shows 10 at a time; restocks reveal more."""
     display_name = "Shop Slots"
     range_start = 0
-    range_end = 10
-    default = 10
+    range_end = 50
+    default = 30
 
 
 class DrainTrap(Toggle):
@@ -49,6 +64,8 @@ class RequiredDUCompletions(Range):
 @dataclass
 class B3Options(PerGameCommonOptions):
     randomize_fights: RandomizeFights
+    randomize_player1: RandomizePlayer1
+    randomize_player2: RandomizePlayer2
     randomize_stages: RandomizeStages
     starting_saga: StartingSaga
     shop_slots: ShopSlots

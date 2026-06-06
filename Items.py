@@ -34,28 +34,28 @@ CHARACTER_ITEMS = {
 # ─── Capsule Items ────────────────────────────────────────────────────────────
 # Random capsules the AP server can send to the player's shop.
 
+from .data.Constants import SKILL_CAPSULES
+
 CAPSULE_ITEMS = {
-    "Capsule: Kamehameha":      B3_BASE_ID + 0x100,
-    "Capsule: Galick Gun":      B3_BASE_ID + 0x101,
-    "Capsule: Final Flash":     B3_BASE_ID + 0x102,
-    "Capsule: Special Beam Cannon": B3_BASE_ID + 0x103,
-    "Capsule: Kaioken":         B3_BASE_ID + 0x104,
-    "Capsule: Super Saiyan":    B3_BASE_ID + 0x105,
-    "Capsule: Spirit Bomb":     B3_BASE_ID + 0x106,
-    "Capsule: Destructo Disc":  B3_BASE_ID + 0x107,
-    "Capsule: Tri-Beam":        B3_BASE_ID + 0x108,
-    "Capsule: Wolf Fang Fist":  B3_BASE_ID + 0x109,
-    "Capsule: Senzu Bean":      B3_BASE_ID + 0x10A,
-    "Capsule: Z-Sword":         B3_BASE_ID + 0x10B,
-    "Zenie x500":               B3_BASE_ID + 0x110,
-    "Zenie x1000":              B3_BASE_ID + 0x111,
-    "Zenie x2000":              B3_BASE_ID + 0x112,
+    f"Skill: {name}": B3_BASE_ID + 0x100 + i
+    for i, name in enumerate(SKILL_CAPSULES.keys())
 }
+CAPSULE_ITEMS.update({
+    "Zenie x500":   B3_BASE_ID + 0x110 + 0xA0,
+    "Zenie x1000":  B3_BASE_ID + 0x111 + 0xA0,
+    "Zenie x2000":  B3_BASE_ID + 0x112 + 0xA0,
+})
 
 # ─── Trap Items ───────────────────────────────────────────────────────────────
 
 TRAP_ITEMS = {
     "HP Drain Trap":  B3_BASE_ID + 0x200,
+}
+
+# ─── Special Items ────────────────────────────────────────────────────────────
+
+SPECIAL_ITEMS = {
+    "Shop Restock":  B3_BASE_ID + 0x300,
 }
 
 # ─── Full item table ──────────────────────────────────────────────────────────
@@ -65,12 +65,15 @@ item_table.update(SAGA_ITEMS)
 item_table.update(CHARACTER_ITEMS)
 item_table.update(CAPSULE_ITEMS)
 item_table.update(TRAP_ITEMS)
+item_table.update(SPECIAL_ITEMS)
 
 def get_item_classification(name: str) -> ItemClassification:
     if name in SAGA_ITEMS:
         return ItemClassification.progression
     if name in CHARACTER_ITEMS:
         return ItemClassification.progression
+    if name in SPECIAL_ITEMS:
+        return ItemClassification.useful
     if name in TRAP_ITEMS:
         return ItemClassification.trap
     return ItemClassification.filler
