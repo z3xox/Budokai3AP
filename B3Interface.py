@@ -320,19 +320,19 @@ def build_cave(matchups: dict, randomize_stages: bool = True) -> bytes:
         if data.get("drain"):
             a.write_word(ADDR_BATTLE_MOD, 0x00020003)
 
-        # P1 character + clear template + Breakthrough block
+        # P1 character + form (transformation) + Breakthrough block
         if data.get("write_p1", True):
             a.write_word(ADDR_P1_CHAR,   p1["char"])
-            a.write_word(ADDR_P1_CHAR_T4, 0)
+            a.write_word(ADDR_P1_CHAR_T4, p1.get("form", 0) & 0xFFFFFFFF)
             a.write_word(ADDR_P1_CAPS + 0x00, cap_word(p1["bt"]))
             a.write_word(ADDR_P1_CAPS + 0x04, 0xFFFFFFFF)
             a.write_word(ADDR_P1_CAPS + 0x08, 0xFFFFFFFF)
             a.write_word(ADDR_P1_CAPS + 0x0C, 0xFFFFFFFF)
 
-        # P2 character + clear template + Breakthrough block
+        # P2 character + form (transformation) + Breakthrough block
         if data.get("write_p2", True):
             a.write_word(ADDR_P2_CHAR,   p2["char"])
-            a.write_word(ADDR_P2_CHAR_T4, 0)
+            a.write_word(ADDR_P2_CHAR_T4, p2.get("form", 0) & 0xFFFFFFFF)
             a.write_word(ADDR_P2_CAPS + 0x00, cap_word(p2["bt"]))
             a.write_word(ADDR_P2_CAPS + 0x04, 0xFFFFFFFF)
             a.write_word(ADDR_P2_CAPS + 0x08, 0xFFFFFFFF)

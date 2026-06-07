@@ -24,6 +24,7 @@ Dragon Universe fights, the Skill Shop, character unlocks, and skill capsules be
 | `randomize_fights` | true | Master toggle for DU fight randomization |
 | `randomize_player1` | false | Randomize your character (P1) |
 | `randomize_player2` | true | Randomize the opponent (P2) |
+| `randomize_transformations` | false | Give randomized fighters a random starting transformation/form each fight |
 | `randomize_stages` | true | Randomize battle stages |
 | `shop_slots` | 30 | Skill Shop checks (0–50); shows 10 at a time, more via Shop Restock |
 | `drain_trap` | false | Include HP Drain traps |

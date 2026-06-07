@@ -29,6 +29,15 @@ class RandomizeStages(Toggle):
     default = 1
 
 
+class RandomizeTransformations(Toggle):
+    """Give randomized fighters a random starting transformation/form each fight
+    (e.g. spawn as SSJ, Perfect Cell, a fusion). Applies to whichever sides are
+    randomized (follows Randomize Player 1 / Player 2). Base form is included in
+    the random pool, so not every fighter spawns transformed."""
+    display_name = "Randomize Transformations"
+    default = 0
+
+
 class StartingSaga(Choice):
     """Which saga Goku starts with unlocked in Dragon Universe."""
     display_name = "Starting Saga"
@@ -91,6 +100,7 @@ class B3Options(PerGameCommonOptions):
     randomize_player1: RandomizePlayer1
     randomize_player2: RandomizePlayer2
     randomize_stages: RandomizeStages
+    randomize_transformations: RandomizeTransformations
     starting_saga: StartingSaga
     shop_slots: ShopSlots
     drain_trap: DrainTrap

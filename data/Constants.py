@@ -595,3 +595,37 @@ DRAGON_BALL_ADDRS = {
 }
 
 SCREEN_SHENRON = 0x010B  # Summoning Shenron screen (wish made)
+
+# ─── Starting Transformations & Fusions ──────────────────────────────────────
+# Spawn state = char ID (P1 0x0044B5C0 / P2 0x0044B610) + form field
+# (P1 0x0044B5C4 / P2 0x0044B614), BOTH written at battle setup (cave timing).
+# Form 0 = base. Indices are per-character. Mapped via DU scripted fights.
+TRANSFORMATIONS = {
+    # name: (char_id, {form_index: "form name"})
+    "Goku":       (0x00, {1: "Kaioken", 2: "SSJ1", 3: "SSJ2", 4: "SSJ3", 5: "SSJ4"}),
+    "Kid Gohan":  (0x02, {1: "Unlock Potential"}),
+    "Teen Gohan": (0x03, {1: "SSJ1", 2: "SSJ2"}),
+    "Gohan":      (0x04, {1: "SSJ1", 2: "SSJ2", 3: "Elder Kai Potential"}),
+    "Goten":      (0x06, {1: "SSJ1"}),
+    "Vegeta":     (0x07, {1: "SSJ1", 2: "SSJ2", 3: "SSJ4", 4: "Majin Vegeta"}),
+    "Trunks":     (0x08, {1: "SSJ1", 2: "SSJ2"}),
+    "Kid Trunks": (0x09, {1: "SSJ1"}),
+    "Krillin":    (0x0A, {1: "Unlock Potential"}),
+    "Piccolo":    (0x0B, {1: "Fused"}),
+    "Hercule":    (0x0E, {1: "High Tension"}),
+    "Frieza":     (0x1B, {1: "2nd Form", 2: "3rd Form", 3: "Final Form", 4: "100% Full Power", 5: "Mecha Frieza"}),
+    "Cell":       (0x21, {1: "Semi-Perfect", 2: "Perfect", 3: "Super Perfect"}),
+    "Dabura":     (0x25, {1: "Demonic Will"}),
+    "Cooler":     (0x26, {1: "Final Form", 2: "Metal Cooler"}),
+    "Broly":      (0x28, {1: "Legendary Super Saiyan"}),
+    "Saibaman":   (0x2A, {1: "Self-Destructing"}),
+}
+
+# Fusion / special fighters (char ID + form field). These are distinct fighters.
+FUSIONS = {
+    "Gotenks":      (0x40, {3: "Gotenks", 4: "SSJ Gotenks", 5: "SSJ3 Gotenks"}),
+    "Gogeta":       (0x44, {3: "SSJ Gogeta"}),
+    "SSJ4 Gogeta":  (0x46, {4: "SSJ4 Gogeta"}),
+    "Vegito":       (0x48, {2: "Vegito", 3: "Super Vegito"}),
+    "Kibito Kai":   (0x4C, {2: "Kibito Kai"}),
+}

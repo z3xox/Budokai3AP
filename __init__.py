@@ -131,6 +131,7 @@ class B3World(World):
             "randomize_player1":  self.options.randomize_player1.value,
             "randomize_player2":  self.options.randomize_player2.value,
             "randomize_stages":   self.options.randomize_stages.value,
+            "randomize_transformations": self.options.randomize_transformations.value,
             "starting_saga":      self.options.starting_saga.value,
             "shop_slots":         self.options.shop_slots.value,
             "drain_trap":         self.options.drain_trap.value,

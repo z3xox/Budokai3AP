@@ -225,9 +225,26 @@ class B3Context(CommonContext):
         master = bool(self.slot_data.get("randomize_fights", 1)) if self.slot_data else True
         rand_p1 = bool(self.slot_data.get("randomize_player1", 0)) if self.slot_data else False
         rand_p2 = bool(self.slot_data.get("randomize_player2", 1)) if self.slot_data else True
+        rand_xform = bool(self.slot_data.get("randomize_transformations", 0)) if self.slot_data else False
         # Master toggle gates both
         rand_p1 = rand_p1 and master
         rand_p2 = rand_p2 and master
+
+        from .data.Constants import TRANSFORMATIONS
+
+        def pick_form(char_name):
+            """Pick a random valid form for a character (0 = base included)."""
+            if not rand_xform:
+                return 0
+            # ROSTER "Adult Gohan" maps to TRANSFORMATIONS "Gohan"
+            key = "Gohan" if char_name == "Adult Gohan" else char_name
+            entry = TRANSFORMATIONS.get(key)
+            if not entry:
+                return 0
+            _cid, forms = entry
+            # Pool = base (0) + all valid form indices
+            pool = [0] + list(forms.keys())
+            return rng.choice(pool)
 
         self.matchups = {}
         for key in FIGHT_LOCATIONS:
@@ -237,13 +254,16 @@ class B3Context(CommonContext):
             p2_char, p2_bt = ROSTER[p2_name]
             stage_id = rng.choice(stage_ids) if randomize_stages else 0x05
 
+            p1_form = pick_form(p1_name) if rand_p1 else 0
+            p2_form = pick_form(p2_name) if rand_p2 else 0
+
             drain = False
             if drain_trap and rng.random() < 0.2:
                 drain = True
 
             self.matchups[key] = {
-                "p1": {"char": p1_char, "bt": p1_bt, "name": p1_name},
-                "p2": {"char": p2_char, "bt": p2_bt, "name": p2_name},
+                "p1": {"char": p1_char, "bt": p1_bt, "name": p1_name, "form": p1_form},
+                "p2": {"char": p2_char, "bt": p2_bt, "name": p2_name, "form": p2_form},
                 "stage_id": stage_id,
                 "drain": drain,
                 "write_p1": rand_p1,
