@@ -53,9 +53,8 @@ class B3World(World):
     def create_items(self):
         pool = []
 
-        # Saga progression items
-        for name in SAGA_ITEMS:
-            pool.append(create_item(self, name))
+        # Saga unlocks are NOT added to the pool — all sagas are open (the
+        # saga items are precollected only, so they'd be useless filler here).
 
         # Character DU unlocks
         for name in CHARACTER_UNLOCK_ITEMS.values():
@@ -77,19 +76,25 @@ class B3World(World):
             for _ in range(rank_up_count):
                 pool.append(create_item(self, "Dragon Arena Rank Up"))
 
-        # Pad with capsule fillers + optional traps
+        # Add each skill capsule exactly ONCE (unique rewards, not repeated).
+        skill_names = [n for n in CAPSULE_ITEMS.keys() if n.startswith("Skill: ")]
+        for name in skill_names:
+            pool.append(create_item(self, name))
+
+        # Pad any remaining locations with generic filler (Zenie / traps),
+        # NOT by repeating skills.
         total_locs  = len(self.multiworld.get_unfilled_locations(self.player))
-        total_items = len(pool)
-        needed = max(0, total_locs - total_items)
+        needed = max(0, total_locs - len(pool))
 
-        capsule_names = list(CAPSULE_ITEMS.keys())
-        trap_names    = list(TRAP_ITEMS.keys()) if self.options.drain_trap else []
-        filler_pool   = capsule_names + trap_names
+        zenie_names = [n for n in CAPSULE_ITEMS.keys() if n.startswith("Zenie")]
+        trap_names  = list(TRAP_ITEMS.keys()) if self.options.drain_trap else []
+        filler_pool = zenie_names + trap_names
+        if not filler_pool:
+            filler_pool = zenie_names or ["Zenie x500"]
 
-        if filler_pool:
-            for i in range(needed):
-                name = filler_pool[i % len(filler_pool)]
-                pool.append(create_item(self, name))
+        for i in range(needed):
+            name = filler_pool[i % len(filler_pool)]
+            pool.append(create_item(self, name))
 
         self.multiworld.itempool.extend(pool)
 
@@ -132,6 +137,7 @@ class B3World(World):
             "required_du_completions": self.options.required_du_completions.value,
             "dragon_arena_fights":     self.options.dragon_arena_fights.value,
             "arenasanity":             self.options.arenasanity.value,
+            "dragonsanity":            self.options.dragonsanity.value,
             "seed":               self.multiworld.seed_name,
             "starting_character": getattr(self, "starting_character", "Goku DU"),
         }

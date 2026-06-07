@@ -5,6 +5,8 @@ from .Locations import (
     SHOP_LOCATIONS,
     DU_COMPLETION_LOCATIONS,
     DRAGON_ARENA_LOCATIONS,
+    DRAGON_BALL_LOCATIONS,
+    WISH_LOCATIONS,
 )
 
 # DU characters and which saga unlocks gate their later fights.
@@ -169,6 +171,36 @@ def create_regions(world):
             da_region.locations.append(loc)
         multiworld.regions.append(da_region)
         menu.connect(da_region)
+
+    # Dragon Balls & Wishes (dragonsanity) — gated behind the matching character
+    dragonsanity = False
+    try:
+        dragonsanity = bool(int(world.options.dragonsanity.value))
+    except Exception:
+        pass
+    if dragonsanity:
+        # Location char name -> unlock item name (Gohan = Adult Gohan DU)
+        char_to_item = {
+            "Goku": "Goku DU", "Kid Gohan": "Kid Gohan DU",
+            "Teen Gohan": "Teen Gohan DU", "Gohan": "Adult Gohan DU",
+            "Vegeta": "Vegeta DU", "Krillin": "Krillin DU",
+            "Piccolo": "Piccolo DU", "Tien": "Tien DU", "Yamcha": "Yamcha DU",
+            "Uub": "Uub DU", "Broly": "Broly DU",
+        }
+        db_region = Region("Dragon Balls", player, multiworld)
+        for name, loc_id in {**DRAGON_BALL_LOCATIONS, **WISH_LOCATIONS}.items():
+            # Extract the character from the location name
+            if name.startswith("Dragon Ball: "):
+                ch = name[len("Dragon Ball: "):].rsplit(" #", 1)[0]
+            else:  # "Wish: <char>"
+                ch = name[len("Wish: "):]
+            item_name = char_to_item.get(ch)
+            loc = B3Location(player, name, loc_id, db_region)
+            if item_name:
+                loc.access_rule = (lambda inm: (lambda state: state.has(inm, player)))(item_name)
+            db_region.locations.append(loc)
+        multiworld.regions.append(db_region)
+        menu.connect(db_region)
 
     # DU completion region - client sends these when the DU credits screen is reached.
     du_complete_region = Region("DU Completions", player, multiworld)

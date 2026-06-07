@@ -183,11 +183,26 @@ DRAGON_ARENA_LOCATIONS = {
     for i in range(380)
 }
 
+# Dragon Balls: 7 per DU character. Wishes: 1 per character.
+_DU_CHARS = ["Goku", "Kid Gohan", "Teen Gohan", "Gohan", "Vegeta", "Krillin",
+             "Piccolo", "Tien", "Yamcha", "Uub", "Broly"]
+DRAGON_BALL_LOCATIONS = {
+    f"Dragon Ball: {ch} #{b+1}": B3_LOC_BASE + 0x900 + ci * 8 + b
+    for ci, ch in enumerate(_DU_CHARS)
+    for b in range(7)
+}
+WISH_LOCATIONS = {
+    f"Wish: {ch}": B3_LOC_BASE + 0xA00 + ci
+    for ci, ch in enumerate(_DU_CHARS)
+}
+
 location_table = {}
 location_table.update(DU_BATTLE_LOCATIONS)
 location_table.update(SHOP_LOCATIONS)
 location_table.update(DU_COMPLETION_LOCATIONS)
 location_table.update(DRAGON_ARENA_LOCATIONS)
+location_table.update(DRAGON_BALL_LOCATIONS)
+location_table.update(WISH_LOCATIONS)
 
 def get_location_names():
     return {name: loc_id for name, loc_id in location_table.items()}

@@ -78,6 +78,13 @@ class Arenasanity(Toggle):
     default = 0
 
 
+class Dragonsanity(Toggle):
+    """Add Dragon Ball collection (7 per DU character = 77) and Shenron wishes
+    (1 per character = 11) as checks. Disabled by default."""
+    display_name = "Dragonsanity"
+    default = 0
+
+
 @dataclass
 class B3Options(PerGameCommonOptions):
     randomize_fights: RandomizeFights
@@ -90,3 +97,4 @@ class B3Options(PerGameCommonOptions):
     required_du_completions: RequiredDUCompletions
     dragon_arena_fights: DragonArenaFights
     arenasanity: Arenasanity
+    dragonsanity: Dragonsanity

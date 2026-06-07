@@ -28,6 +28,7 @@ Dragon Universe fights, the Skill Shop, character unlocks, and skill capsules be
 | `shop_slots` | 30 | Skill Shop checks (0–50); shows 10 at a time, more via Shop Restock |
 | `drain_trap` | false | Include HP Drain traps |
 | `required_du_completions` | 1 | DU campaigns needed to win (1–11) |
+| `dragonsanity` | 0 | Add Dragon Ball collection (7 per character = 77) and Shenron wishes |
 | `dragon_arena_fights` | 0 | Dragon Arena fights (0–380) |
 
 ## Checks
@@ -35,6 +36,7 @@ Dragon Universe fights, the Skill Shop, character unlocks, and skill capsules be
 - **Skill Shop (0–50)** — buy a capsule = a check; capsules are just triggers (not kept)
 - **DU completions** — finish a campaign
 - **Dragon Arena Fights** Up to 380 Checks
+- **Dragonballs & Wishes** 88
 
 ## Items
 - **Character unlocks (11)** — start with one random DU character, unlock the rest

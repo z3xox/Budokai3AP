@@ -15,17 +15,21 @@ from .data.Constants import (
     ADDR_CAVE, ADDR_DEBUG, ADDR_SCRATCH, ADDR_INTERCEPT, ADDR_RETURN,
     CAVE_JUMP, ORIG_INSTR,
     ADDR_SCREEN, ADDR_MODE, ADDR_DU_CHAR, ADDR_ZENIE_RT,
+    ADDR_ZENIE_DU, ADDR_ZENIE_SAVED,
     ADDR_P1_CHAR, ADDR_P1_CHAR_T4, ADDR_P1_CAPS,
     ADDR_P2_CHAR, ADDR_P2_CHAR_T4, ADDR_P2_CAPS,
     ADDR_STAGE_SELECT, ADDR_BATTLE_MOD,
     ADDR_SHOP_STRUCT_BASE, SHOP_STRUCT_SIZE, SHOP_DISPLAY_BASE,
     SHOP_OWNERSHIP_BASE, SHOP_PRICE, SHOP_MAX_SLOTS, ADDR_SHOP_COUNT,
+    SHOP_SIG0, SHOP_SIG1, SHOP_OFF_COUNT_FROM_SIG, SHOP_OFF_ITEMS_FROM_SIG,
+    SHOP_SCAN_START, SHOP_SCAN_END,
     SHOP_OFF_DISPLAY, SHOP_OFF_RECEIVED, SHOP_OFF_PRICE, SHOP_OFF_FLAGS,
     SHOP_CAPSULE_POOL,
     SKILL_CAPSULES,
     SCREEN_DA_CHARSEL, SCREEN_DA_BATTLE, SCREEN_DA_RESULTS,
     DA_TICKET_DISPLAY, DA_TICKET_OWNERSHIP, DA_TICKET_DU_RT,
     ADDR_DA_OPP_COUNT, ADDR_DA_CLEAR_BASE, DA_FIGHT_COUNT,
+    DRAGON_BALL_ADDRS, SCREEN_SHENRON,
     OFFSET_BATTLE, OFFSET_SAGA, OFFSET_BATTLE_COMP,
     SCREEN_SHOP, SCREEN_WORLD_MAP, SCREEN_DU_BATTLE,
     SCREEN_RESULTS_WIN, SCREEN_SHENRON,
@@ -359,6 +363,7 @@ class B3Interface:
         self._game_id: Optional[str] = None
         self._cave_installed = False
         self._da_count_cache = None  # cached arena count address (per session)
+        self._shop_sig_cache = None  # cached ess_shop.c anchor (per load)
         self._installed_cave_code = None
         self._prev_screen = -1
         self._prev_battle_states: dict = {}   # char_name → last battle state
@@ -453,6 +458,14 @@ class B3Interface:
     def get_du_char(self) -> int:
         return self.pine.read8(ADDR_DU_CHAR)
 
+    def get_active_du_char_name(self):
+        """Return the active DU character's name (per DU_BASES), or None."""
+        cid = self.get_du_char()
+        for char_name, info in DU_BASES.items():
+            if info["du_id"] == cid:
+                return char_name
+        return None
+
     def in_du(self) -> bool:
         return self.get_mode() == 0x01
 
@@ -537,23 +550,66 @@ class B3Interface:
     def is_shop_open(self) -> bool:
         return self.get_screen() == SCREEN_SHOP
 
+    def find_shop_base(self, use_cache=True):
+        """
+        Locate the live shop struct dynamically. It is allocated per-load and
+        relocates after other menus, but is anchored by the 'ess_shop.c' string.
+        Relative to the string: count at +0x88, item list at +0x98.
+        Returns the string address (the anchor), or None if not found.
+        """
+        # 1) Validate cached anchor cheaply
+        if use_cache and getattr(self, "_shop_sig_cache", None) is not None:
+            a = self._shop_sig_cache
+            try:
+                if (self.pine.read32(a) == SHOP_SIG0
+                        and self.pine.read32(a + 4) == SHOP_SIG1):
+                    return a
+            except Exception:
+                pass
+            self._shop_sig_cache = None
+
+        # 2) Scan for the signature
+        addr = SHOP_SCAN_START
+        while addr < SHOP_SCAN_END:
+            try:
+                if (self.pine.read32(addr) == SHOP_SIG0
+                        and self.pine.read32(addr + 4) == SHOP_SIG1):
+                    self._shop_sig_cache = addr
+                    return addr
+            except Exception:
+                pass
+            addr += 4
+        return None
+
+    def _shop_count_addr(self, sig_addr):
+        return sig_addr + SHOP_OFF_COUNT_FROM_SIG
+
+    def _shop_items_addr(self, sig_addr):
+        return sig_addr + SHOP_OFF_ITEMS_FROM_SIG
+
     def write_shop_stock(self, pool_entries: list):
         """
-        Write AP-controlled shop stock to the item structs at 0x0088DCFC.
-        pool_entries: list of up to 10 (display_index, ownership_index, name) tuples.
-        Writes display index, received index, price, and flags for each slot,
-        and locks the shop count so items don't accumulate across visits.
+        Write AP-controlled shop stock to the live shop struct, located
+        dynamically via the 'ess_shop.c' anchor (the struct relocates after
+        other menus load). Returns True if written, False if the shop struct
+        wasn't found (in which case we must NOT write — avoids corrupting other
+        menus that reuse the buffer, which caused the black-screen hang).
         """
+        sig = self.find_shop_base()
+        if sig is None:
+            return False
+        items_base = self._shop_items_addr(sig)
+        count_addr = self._shop_count_addr(sig)
         count = min(len(pool_entries), SHOP_MAX_SLOTS)
         for i in range(count):
             disp_idx, _own_idx, _name = pool_entries[i]
-            entry = ADDR_SHOP_STRUCT_BASE + i * SHOP_STRUCT_SIZE
+            entry = items_base + i * SHOP_STRUCT_SIZE
             self.pine.write32(entry + SHOP_OFF_DISPLAY,  disp_idx)
             self.pine.write32(entry + SHOP_OFF_RECEIVED, disp_idx)
             self.pine.write32(entry + SHOP_OFF_PRICE,    SHOP_PRICE)
             self.pine.write32(entry + SHOP_OFF_FLAGS,    0x02)
-        # Lock the item count so the game doesn't accumulate items each visit
-        self.pine.write32(ADDR_SHOP_COUNT, count)
+        self.pine.write32(count_addr, count)
+        return True
 
     def grant_skill(self, skill_name: str):
         """Grant a skill capsule by writing 1 to its DU-RT and RT addresses."""
@@ -563,6 +619,16 @@ class B3Interface:
         du_rt, rt = entry
         self.pine.write8(du_rt, 0x01)
         self.pine.write8(rt, 0x01)
+
+    def read_dragon_ball_byte(self, char_name: str) -> int:
+        """Read a character's Dragon Ball collection bitfield (bits 0-6)."""
+        addr = DRAGON_BALL_ADDRS.get(char_name)
+        if addr is None:
+            return 0
+        try:
+            return self.pine.read8(addr)
+        except Exception:
+            return 0
 
     def reapply_skills(self, skills: set):
         """Re-grant all received skills (handles load resets)."""
@@ -622,20 +688,26 @@ class B3Interface:
             self._da_count_cache = None
 
         # 2) Scan for the signature. Count = signature + 0x0C.
-        scan_start = 0x00890000
-        scan_end   = 0x00895000
-        addr = scan_start
-        while addr < scan_end:
-            try:
-                if self.pine.read32(addr) == SIG0 and self.pine.read32(addr + 4) == SIG1:
-                    cnt_addr = addr + 0x0C
-                    cnt = self.pine.read32(cnt_addr)
-                    if 1 <= cnt <= 380:
-                        self._da_count_cache = cnt_addr
-                        return cnt_addr
-            except Exception:
-                pass
-            addr += 4
+        # The struct lands in one of two deterministic regions depending on
+        # entry path: ~0x00890000 (from main menu) or ~0x00A91000 (back from
+        # stage select). Scan both tight windows rather than one huge range.
+        scan_windows = [
+            (0x00890000, 0x00895000),
+            (0x00A90000, 0x00A95000),
+        ]
+        for scan_start, scan_end in scan_windows:
+            addr = scan_start
+            while addr < scan_end:
+                try:
+                    if self.pine.read32(addr) == SIG0 and self.pine.read32(addr + 4) == SIG1:
+                        cnt_addr = addr + 0x0C
+                        cnt = self.pine.read32(cnt_addr)
+                        if 1 <= cnt <= 380:
+                            self._da_count_cache = cnt_addr
+                            return cnt_addr
+                except Exception:
+                    pass
+                addr += 4
         return None
 
     def clamp_da_opponent_count(self, max_count: int):
@@ -656,16 +728,24 @@ class B3Interface:
         return self.pine.read8(ADDR_DA_CLEAR_BASE + index)
 
     def clear_shop(self):
-        """Empty the shop (count = 0) — used when no AP capsules remain to sell."""
-        self.pine.write32(ADDR_SHOP_COUNT, 0)
+        """Empty the shop (count = 0) — used when no AP capsules remain to sell.
+        Only acts if the live shop struct is found."""
+        sig = self.find_shop_base()
+        if sig is None:
+            return
+        self.pine.write32(self._shop_count_addr(sig), 0)
 
     def read_capsule_owned(self, ownership_index: int) -> int:
         """Read whether a capsule is owned (1) or not (0)."""
         return self.pine.read8(SHOP_OWNERSHIP_BASE + ownership_index)
 
     def read_shop_slot0_display(self) -> int:
-        """Read the display index of shop slot 0 (to detect game repopulation)."""
-        return self.pine.read32(ADDR_SHOP_STRUCT_BASE + SHOP_OFF_DISPLAY)
+        """Read the display index of shop slot 0 (to detect game repopulation).
+        Returns -1 if the live shop struct isn't found."""
+        sig = self.find_shop_base()
+        if sig is None:
+            return -1
+        return self.pine.read32(self._shop_items_addr(sig) + SHOP_OFF_DISPLAY)
 
     def clear_capsule_owned(self, ownership_index: int):
         """Reset ownership to 0 — we use capsules as AP triggers, player doesn't keep them."""
@@ -725,9 +805,15 @@ class B3Interface:
             self.pine.write8(ADDR_LOCK_TABLE + i, val)
 
     def write_zenie(self, amount: int):
-        """Add Zenie to the player's wallet."""
-        current = self.pine.read32(ADDR_ZENIE_RT)
-        self.pine.write32(ADDR_ZENIE_RT, current + amount)
+        """Add Zenie to all three counters so every context (shop, DU, saved)
+        reflects it: real-time (0x543D28), DU total (0x4C6F08), and the
+        memory-card/saved total (0x495568)."""
+        for addr in (ADDR_ZENIE_RT, ADDR_ZENIE_DU, ADDR_ZENIE_SAVED):
+            try:
+                current = self.pine.read32(addr)
+                self.pine.write32(addr, current + amount)
+            except Exception:
+                pass
 
     def apply_character_locks(self, unlocked: set):
         """

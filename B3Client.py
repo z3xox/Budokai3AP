@@ -83,6 +83,12 @@ class B3Context(CommonContext):
         self.da_checks_sent: set = set()     # arena fight indices already sent
         self._da_prev_clears: dict = {}      # index -> last clear flag
 
+        # Dragonsanity state
+        self.dragonsanity: bool = False
+        self._db_prev: dict = {}             # char -> last dragon-ball byte
+        self.db_checks_sent: set = set()     # "char#bit" already sent
+        self.wish_checks_sent: set = set()   # char already wished
+
         # Shop state
         # The pool of capsules (from slot_data seed) — up to 50, shown 10 at a time
         self.shop_pool: list = []          # list of (display_idx, own_idx, name)
@@ -125,6 +131,7 @@ class B3Context(CommonContext):
         self.da_fights_total = int(self.slot_data.get("dragon_arena_fights", 0)) if self.slot_data else 0
         if self.slot_data and int(self.slot_data.get("arenasanity", 0)):
             self.da_fights_total = 380
+        self.dragonsanity = bool(self.slot_data.get("dragonsanity", 0)) if self.slot_data else False
 
         if self.connected_to_game:
             logger.info("[B3] AP server connected — building matchups and installing cave...")
@@ -174,6 +181,8 @@ class B3Context(CommonContext):
                         f"({(self.restocks_received + 1) * 10} capsules unlocked)")
             if self.iface.is_shop_open():
                 self._refresh_shop()
+                # Hint the newly-revealed capsules
+                asyncio.create_task(self._hint_shop_items())
 
         elif name.startswith("Skill: "):
             skill_name = name[len("Skill: "):]
@@ -290,29 +299,92 @@ class B3Context(CommonContext):
         # Remember which pool indices are in which slot for purchase detection
         self._visible_pool_indices = [i for i, _e in visible]
 
+    def _handle_dragonsanity(self):
+        """Detect Dragon Ball collection (bit flips) and Shenron wishes.
+
+        Guarded so it never fires on garbage reads (e.g. during game shutdown
+        or outside Dragon Universe): only runs while in DU, rejects invalid
+        bytes (valid = 0x00-0x7F, only bits 0-6), and only accepts a value once
+        we've seen it stable.
+        """
+        if not self.dragonsanity:
+            return
+
+        # Only operate inside Dragon Universe. Outside DU (incl. shutdown /
+        # menu teardown) these addresses hold stale/garbage data.
+        if not self.iface.in_du():
+            return
+
+        from .data.Constants import DRAGON_BALL_ADDRS
+        # Dragon Balls: watch each character's bitfield for bits going 0->1.
+        self._db_scan_counter = getattr(self, "_db_scan_counter", 0) + 1
+        if self._db_scan_counter >= 10:
+            self._db_scan_counter = 0
+            for ch in DRAGON_BALL_ADDRS:
+                cur = self.iface.read_dragon_ball_byte(ch)
+                # Reject invalid/garbage reads: valid Dragon Ball byte uses only
+                # bits 0-6 (0x00-0x7F). Anything else (0xFF, high bit set) is
+                # garbage — skip without updating prev so we don't latch it.
+                if cur < 0 or cur > 0x7F:
+                    continue
+                prev = self._db_prev.get(ch, None)
+                # On first valid sight, just record it — do NOT fire (avoids
+                # mass-firing if the first read happens to have bits set from a
+                # save already in progress; pre-collected balls are rare and not
+                # worth the false-positive risk on shutdown).
+                if prev is None:
+                    self._db_prev[ch] = cur
+                    continue
+                for bit in range(7):
+                    mask = 1 << bit
+                    key = f"{ch}#{bit}"
+                    if key in self.db_checks_sent:
+                        continue
+                    now_set = bool(cur & mask)
+                    was_set = bool(prev & mask)
+                    if now_set and not was_set:  # genuine 0->1 we observed
+                        self.db_checks_sent.add(key)
+                        loc_name = f"Dragon Ball: {ch} #{bit + 1}"
+                        asyncio.create_task(self._send_check(loc_name))
+                        logger.info(f"[B3] {loc_name}")
+                self._db_prev[ch] = cur
+
+        # Wishes: fire when on the Shenron summon screen, for the ACTIVE DU
+        # character (not based on having all balls). One wish per character.
+        if self.iface.get_screen() == 0x010B:  # SCREEN_SHENRON
+            active = self.iface.get_active_du_char_name()
+            if active:
+                loc_char = "Gohan" if active == "Adult Gohan" else active
+                if loc_char not in self.wish_checks_sent:
+                    self.wish_checks_sent.add(loc_char)
+                    loc_name = f"Wish: {loc_char}"
+                    asyncio.create_task(self._send_check(loc_name))
+                    logger.info(f"[B3] {loc_name}")
+
     def _handle_dragon_arena(self):
-        """Gate the arena opponent list and detect fight wins."""
+        """Gate the arena opponent list and detect fight wins.
+
+        Conservative about WHEN it touches memory: the arena list struct is torn
+        down when a fight starts, so writing the clamp during that transition can
+        crash the emulator. We clamp ONLY on the stable list screen (0x0618) and
+        detect wins ONLY on the results/save screens (0x061A/0x061B) — never
+        during the battle-load transition (0x0619) or entrance (0x0617).
+        """
         if self.da_fights_total <= 0:
             return
 
-        # Keep the ticket applied (lock if not received, unlock if received)
-        # Only touch ticket bytes on safe screens to avoid mid-battle writes.
         screen = self.iface.get_screen()
 
-        # Clamp the visible opponent count. Must be set BEFORE the list builds,
-        # so we write it on the entrance screen (0x0617) as well as the list
-        # screen (0x0618). The list reads this count when it is constructed.
-        if screen in (0x0617, 0x0618):
+        # Clamp the visible opponent count — ONLY on the stable list screen.
+        # (Removed 0x0617 entrance: clamping there raced the list teardown when
+        # starting the first fight and crashed PCSX2.)
+        if screen == 0x0618:  # SCREEN_DA_CHARSEL (list)
             allowed = min((self.da_rank_ups + 1) * 10, self.da_fights_total)
             self.iface.clamp_da_opponent_count(allowed)
 
-        # Win detection: arena clear flags flip 0->1 when a fight is won.
-        # Only the first da_fights_total fights are AP checks.
-        # On first pass (prev unknown), an already-set flag counts as a win
-        # (Option B) so pre-cleared fights aren't permanently missed.
-        # Throttled to ~once per second — reading hundreds of flags every poll
-        # would lag (especially with arenasanity = 380 fights).
-        if screen in (0x0617, 0x0618, 0x0619, 0x061A, 0x061B):  # any arena screen
+        # Win detection — ONLY on results/save screens, never during the battle
+        # load. Throttled to ~once per second (380 flag reads is expensive).
+        if screen in (0x061A, 0x061B):  # results or post-battle save
             self._da_scan_counter = getattr(self, "_da_scan_counter", 0) + 1
             if self._da_scan_counter >= 10:  # every ~1 second at 0.1s poll
                 self._da_scan_counter = 0
@@ -333,26 +405,49 @@ class B3Context(CommonContext):
         """
         Detect shop open/refresh and purchases; rotate stock.
 
-        The Skill Shop keeps screen ID 0x0016 but repopulates the item struct
-        at 0x0088DCFC with random capsules each time it opens. We detect that
-        repopulation (slot 0 display index differs from what we wrote) and
-        immediately overwrite with our AP stock.
+        The Skill Shop struct is allocated dynamically and relocates after other
+        menus load. We locate it via the 'ess_shop.c' anchor. We only act when
+        that anchor is present (find_shop_base != None) — this both finds the
+        right address after relocation AND prevents writing into other menus
+        that share screen 0x0016 (which caused the black-screen hang).
         """
         if not self.shop_pool:
             return
 
         on_shop_screen = self.iface.is_shop_open()  # 0x0016 (skill menu/shop)
-
         if not on_shop_screen:
             self._shop_was_open = False
             self._last_written_slot0 = None
             return
 
-        # Log once when entering shop
+        # Confirm the REAL shop is loaded by locating its anchor. If not found,
+        # this 0x0016 screen is some other menu — do nothing (no corruption).
+        shop_base = self.iface.find_shop_base()
+        if shop_base is None:
+            self._shop_was_open = False
+            self._last_written_slot0 = None
+            return
+
+        # Log once when entering shop, and force a rewrite on fresh entry
         if not self._shop_was_open:
             slot0 = self.iface.read_shop_slot0_display()
-            logger.info(f"[B3] Shop screen detected (0x0016). Slot0 display=0x{slot0:X}, "
-                        f"pool={len(self.shop_pool)}, restocks={self.restocks_received}")
+            logger.info(f"[B3] Shop detected (ess_shop.c @ 0x{shop_base:X}). "
+                        f"Slot0=0x{slot0:X}, pool={len(self.shop_pool)}, "
+                        f"restocks={self.restocks_received}")
+            self._last_written_slot0 = None
+            visible = self._visible_shop_entries()
+            if visible:
+                self._refresh_shop()
+                self._last_written_slot0 = visible[0][1][0]
+                self._shop_was_open = True
+                # Hint the capsules now for sale so the player knows the stock
+                self._last_hinted_count = len(visible)
+                asyncio.create_task(self._hint_shop_items())
+                return
+            else:
+                self.iface.clear_shop()
+                self._shop_was_open = True
+                return
 
         # We're on the skill menu/shop screen. Check if the game repopulated
         # the struct with its own random stock (our write got overwritten).
@@ -366,12 +461,21 @@ class B3Context(CommonContext):
         expected_slot0 = visible[0][1][0]  # display index we want in slot 0
         actual_slot0 = self.iface.read_shop_slot0_display()
 
-        last_written = getattr(self, "_last_written_slot0", None)
-
-        if actual_slot0 != expected_slot0 and actual_slot0 != last_written:
-            # Game repopulated the shop — overwrite with our stock
+        # Re-assert our stock whenever slot0 doesn't match what we expect,
+        # OR whenever slot0 isn't any of our pool's display indices (meaning the
+        # game repopulated with its own stock — e.g. after World Tournament).
+        our_display_set = {e[0] for _i, e in
+                           [(i, self.shop_pool[i]) for i in range(len(self.shop_pool))]}
+        if actual_slot0 != expected_slot0 or actual_slot0 not in our_display_set:
             self._refresh_shop()
             self._last_written_slot0 = expected_slot0
+
+        # Re-hint if the number of visible capsules grew (e.g. a Shop Restock
+        # arrived). Re-sending is safe — the server skips existing hints.
+        last_hinted_count = getattr(self, "_last_hinted_count", 0)
+        if len(visible) > last_hinted_count:
+            self._last_hinted_count = len(visible)
+            asyncio.create_task(self._hint_shop_items())
 
         # Watch for purchases via ownership flips
         vis_indices = getattr(self, "_visible_pool_indices", [])
@@ -392,6 +496,28 @@ class B3Context(CommonContext):
                     if self._visible_shop_entries() else None
 
         self._shop_was_open = True
+
+    async def _hint_shop_items(self):
+        """Create AP hints for the capsules currently for sale, so the player
+        sees what each shop location contains. Re-sending is safe: the server
+        silently skips hints that already exist, so this reliably covers items
+        newly revealed by a Shop Restock without duplicating existing hints."""
+        if not self.server or not self.slot:
+            return
+        from .Locations import location_table
+        visible = self._visible_shop_entries()
+        loc_ids = []
+        for _pool_idx, entry in visible:
+            disp_idx, own_idx, name = entry
+            loc_name = f"Shop: {name}"
+            loc_id = location_table.get(loc_name)
+            if loc_id is not None and loc_id not in self.checked_locations:
+                loc_ids.append(loc_id)
+        if loc_ids:
+            await self.send_msgs([{"cmd": "LocationScouts",
+                                   "locations": loc_ids,
+                                   "create_as_hint": 2}])
+            logger.info(f"[B3] Sent/refreshed {len(loc_ids)} shop hints.")
 
     async def _send_check(self, location_name: str):
         """Send a location check to the AP server."""
@@ -538,6 +664,9 @@ async def pcsx2_sync_task(ctx: B3Context):
 
             # Handle Dragon Arena
             ctx._handle_dragon_arena()
+
+            # Handle Dragonsanity (Dragon Balls + Wishes)
+            ctx._handle_dragonsanity()
 
             await asyncio.sleep(0.1)
 

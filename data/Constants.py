@@ -19,6 +19,7 @@ ADDR_MODE          = 0x00543C20   # DU mode byte (0x01 = DU)
 ADDR_DU_CHAR       = 0x00543C24   # current DU character selector
 ADDR_ZENIE_RT      = 0x00543D28   # real-time Zenie (32-bit)
 ADDR_ZENIE_DU      = 0x004C6F08   # DU Zenie (32-bit)
+ADDR_ZENIE_SAVED   = 0x00495568   # memory-card / saved total (updates on save)
 
 SCREEN_SHOP        = 0x0016
 
@@ -33,7 +34,7 @@ ADDR_STAGE_SELECT  = 0x0044B6F4
 ADDR_BATTLE_MOD    = 0x0044B708   # 0x00020003 = HP drain
 
 # ─── Shop ────────────────────────────────────────────────────────────────────
-ADDR_SHOP_COUNT    = 0x0088DCEC   # number of items (confirmed, =0x0A when 10 shown)
+ADDR_SHOP_COUNT    = 0x0088DCEC   # fallback (first-boot location); struct is dynamic
 ADDR_SHOP_TABLE    = 0x0088DE3C   # item entries (20 bytes each)
 ADDR_CAPS_OWN_BASE = 0x005510C7   # capsule ownership array
 
@@ -429,6 +430,17 @@ SHOP_OFF_RECEIVED = 0x04   # capsule received index
 SHOP_OFF_PRICE    = 0x08   # price (32-bit)
 SHOP_OFF_FLAGS    = 0x0C   # flags (0x02)
 
+# The shop struct is allocated dynamically and relocates after other menus
+# load. It is anchored by the module string 'ess_shop.c'. Relative to the
+# string address: count at +0x88, item list at +0x98 (stride 0x14).
+SHOP_SIG0 = 0x5F737365   # 'ess_'
+SHOP_SIG1 = 0x706F6873   # 'shop'
+SHOP_OFF_COUNT_FROM_SIG = 0x88
+SHOP_OFF_ITEMS_FROM_SIG = 0x98
+# Scan window where the shop struct lives
+SHOP_SCAN_START = 0x00880000
+SHOP_SCAN_END   = 0x00890000
+
 # Shop capsule pool: (display_index, ownership_index, name)
 # Up to 50 capsules. Shop shows 10 at a time, restock items unlock more.
 SHOP_CAPSULE_POOL = [
@@ -512,6 +524,9 @@ SKILL_CAPSULES = {
     "Super Saiyan 2 (Vegeta)":        (0x4C6F5D, 0x551111),
     "Super Saiyan 4 (Vegeta)":        (0x4C6F5E, 0x551112),
     "Legendary Super Saiyan (Broly)": (0x4C6FC5, 0x551179),
+    "Blaster Shell (Broly)":          (0x4C6FC6, 0x55117A),
+    "Soaring Dragon Strike (Gohan)":  (0x4C6F54, 0x551108),
+    "Elder Kai Unlock Ability (Gohan)": (0x4C6F52, 0x551106),
     "Fusion Gogeta (Goku)":           (0x4C6FE0, 0x551194),
     "Fusion Gogeta (Vegeta)":         (0x4C6FE4, 0x551198),
     "Fusion SSJ4 Gogeta (Goku)":      (0x4C6FE8, 0x55119C),
@@ -562,3 +577,21 @@ ADDR_DA_OPP_COUNT = 0x0089080C   # 32-bit; = 0x84 (132) at Lv.1-30 default
 # Arena clear flags: 1 byte per fight, 0x01 when cleared. Win detection.
 ADDR_DA_CLEAR_BASE = 0x00495A16  # Goku Lv.1
 DA_FIGHT_COUNT     = 380          # total arena fights (0x495A16 .. 0x495B91)
+
+# ─── Dragon Balls & Wishes ───────────────────────────────────────────────────
+# One byte per character; bits 0-6 = the 7 Dragon Balls (bit0 = One-Star).
+DRAGON_BALL_ADDRS = {
+    "Goku":       0x0049D284,
+    "Kid Gohan":  0x0049F6A4,
+    "Teen Gohan": 0x004A08B4,
+    "Gohan":      0x004A1AC4,
+    "Vegeta":     0x004A50F4,
+    "Krillin":    0x004A8724,
+    "Piccolo":    0x004A9934,
+    "Tien":       0x004AAB44,
+    "Yamcha":     0x004ABD54,
+    "Uub":        0x004B0594,
+    "Broly":      0x004C38A4,
+}
+
+SCREEN_SHENRON = 0x010B  # Summoning Shenron screen (wish made)
