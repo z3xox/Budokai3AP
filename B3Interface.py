@@ -552,34 +552,48 @@ class B3Interface:
 
     def find_shop_base(self, use_cache=True):
         """
-        Locate the live shop struct dynamically. It is allocated per-load and
-        relocates after other menus, but is anchored by the 'ess_shop.c' string.
-        Relative to the string: count at +0x88, item list at +0x98.
-        Returns the string address (the anchor), or None if not found.
+        Locate the live shop struct dynamically. Returns the first valid
+        ess_shop.c anchor. Use find_all_shop_bases() to get all instances.
         """
-        # 1) Validate cached anchor cheaply
-        if use_cache and getattr(self, "_shop_sig_cache", None) is not None:
-            a = self._shop_sig_cache
-            try:
-                if (self.pine.read32(a) == SHOP_SIG0
-                        and self.pine.read32(a + 4) == SHOP_SIG1):
-                    return a
-            except Exception:
-                pass
+        bases = self.find_all_shop_bases(use_cache=use_cache)
+        return bases[0] if bases else None
+
+    def find_all_shop_bases(self, use_cache=True):
+        """
+        Find ALL ess_shop.c instances in 0x00880000-0x0089FFFF and return
+        their anchor addresses. There can be 2-3 instances; we write to all
+        so the active/displayed one always gets our AP stock.
+        """
+        # Validate cache — it stores a list now
+        if use_cache and getattr(self, "_shop_sig_cache", None):
+            still_valid = []
+            for a in self._shop_sig_cache:
+                try:
+                    if (self.pine.read32(a) == SHOP_SIG0
+                            and self.pine.read32(a + 4) == SHOP_SIG1):
+                        still_valid.append(a)
+                except Exception:
+                    pass
+            if still_valid:
+                self._shop_sig_cache = still_valid
+                return still_valid
             self._shop_sig_cache = None
 
-        # 2) Scan for the signature
+        # Scan full region for all instances
+        found = []
         addr = SHOP_SCAN_START
         while addr < SHOP_SCAN_END:
             try:
                 if (self.pine.read32(addr) == SHOP_SIG0
                         and self.pine.read32(addr + 4) == SHOP_SIG1):
-                    self._shop_sig_cache = addr
-                    return addr
+                    found.append(addr)
+                    addr += 8  # skip past this match
+                    continue
             except Exception:
                 pass
             addr += 4
-        return None
+        self._shop_sig_cache = found if found else None
+        return found
 
     def _shop_count_addr(self, sig_addr):
         return sig_addr + SHOP_OFF_COUNT_FROM_SIG
@@ -588,27 +602,23 @@ class B3Interface:
         return sig_addr + SHOP_OFF_ITEMS_FROM_SIG
 
     def write_shop_stock(self, pool_entries: list):
-        """
-        Write AP-controlled shop stock to the live shop struct, located
-        dynamically via the 'ess_shop.c' anchor (the struct relocates after
-        other menus load). Returns True if written, False if the shop struct
-        wasn't found (in which case we must NOT write — avoids corrupting other
-        menus that reuse the buffer, which caused the black-screen hang).
-        """
-        sig = self.find_shop_base()
-        if sig is None:
+        """Write AP stock to ALL live ess_shop.c instances so whichever one
+        the game displays from gets our capsules."""
+        bases = self.find_all_shop_bases()
+        if not bases:
             return False
-        items_base = self._shop_items_addr(sig)
-        count_addr = self._shop_count_addr(sig)
-        count = min(len(pool_entries), SHOP_MAX_SLOTS)
-        for i in range(count):
-            disp_idx, _own_idx, _name = pool_entries[i]
-            entry = items_base + i * SHOP_STRUCT_SIZE
-            self.pine.write32(entry + SHOP_OFF_DISPLAY,  disp_idx)
-            self.pine.write32(entry + SHOP_OFF_RECEIVED, disp_idx)
-            self.pine.write32(entry + SHOP_OFF_PRICE,    SHOP_PRICE)
-            self.pine.write32(entry + SHOP_OFF_FLAGS,    0x02)
-        self.pine.write32(count_addr, count)
+        for sig in bases:
+            items_base = self._shop_items_addr(sig)
+            count_addr = self._shop_count_addr(sig)
+            count = min(len(pool_entries), SHOP_MAX_SLOTS)
+            for i in range(count):
+                disp_idx, _own_idx, _name = pool_entries[i]
+                entry = items_base + i * SHOP_STRUCT_SIZE
+                self.pine.write32(entry + SHOP_OFF_DISPLAY,  disp_idx)
+                self.pine.write32(entry + SHOP_OFF_RECEIVED, disp_idx)
+                self.pine.write32(entry + SHOP_OFF_PRICE,    SHOP_PRICE)
+                self.pine.write32(entry + SHOP_OFF_FLAGS,    0x02)
+            self.pine.write32(count_addr, count)
         return True
 
     def grant_skill(self, skill_name: str):
@@ -687,13 +697,33 @@ class B3Interface:
                 pass
             self._da_count_cache = None
 
-        # 2) Scan for the signature. Count = signature + 0x0C.
-        # The struct lands in one of two deterministic regions depending on
-        # entry path: ~0x00890000 (from main menu) or ~0x00A91000 (back from
-        # stage select). Scan both tight windows rather than one huge range.
+        # 2) Check known/observed addresses first (instant — no scan needed).
+        KNOWN_SIG_ADDRS = [
+            0x00890740, 0x00893740, 0x00893700,
+            0x0088DC80, 0x0088DF00,
+            0x00A149C0, 0x00A91B00,
+            0x0089F580,
+        ]
+        for sig_addr in KNOWN_SIG_ADDRS:
+            cnt_addr = sig_addr + 0x0C
+            try:
+                if (self.pine.read32(sig_addr) == SIG0
+                        and self.pine.read32(sig_addr + 4) == SIG1):
+                    cnt = self.pine.read32(cnt_addr)
+                    if 1 <= cnt <= 380:
+                        self._da_count_cache = cnt_addr
+                        return cnt_addr
+            except Exception:
+                pass
+
+        # 3) Fallback: scan known regions if not found in priority list.
+        # Three tight scan windows based on all observed signature locations.
+        # Each window covers a cluster of observed addresses with margin.
         scan_windows = [
-            (0x00890000, 0x00895000),
-            (0x00A90000, 0x00A95000),
+            (0x0088D000, 0x0088F000),  # 0x0088DC80, 0x0088DF00
+            (0x00890000, 0x0089F800),  # 0x00890740, 0x00893700, 0x00893740, 0x0089F580
+            (0x00A14000, 0x00A16000),  # 0x00A149C0
+            (0x00A91000, 0x00A92000),  # 0x00A91B00 (back from stage select)
         ]
         for scan_start, scan_end in scan_windows:
             addr = scan_start
@@ -711,29 +741,29 @@ class B3Interface:
         return None
 
     def clamp_da_opponent_count(self, max_count: int):
-        """Clamp the arena opponent list count so only max_count fights show.
-        Locates the count dynamically (address varies per session) and caches it.
-        Only clamps DOWN — never raises above what the game has unlocked."""
+        """Force the arena opponent list count to max_count.
+        Writes unconditionally (not just when current > max) so the value
+        stays pinned even if the game resets it between polls."""
         cnt_addr = self.find_da_count_addr()
         if cnt_addr is None:
             return
         try:
-            current = self.pine.read32(cnt_addr)
-        except Exception:
-            return
-        if current > max_count:
             self.pine.write32(cnt_addr, max_count)
+        except Exception:
+            pass
 
     def read_da_clear_flag(self, index: int) -> int:
         return self.pine.read8(ADDR_DA_CLEAR_BASE + index)
 
     def clear_shop(self):
-        """Empty the shop (count = 0) — used when no AP capsules remain to sell.
-        Only acts if the live shop struct is found."""
-        sig = self.find_shop_base()
-        if sig is None:
-            return
-        self.pine.write32(self._shop_count_addr(sig), 0)
+        """Empty the shop (count = 0) across all live instances.
+        Also writes to the fallback hardcoded address as a safety net."""
+        # Write to all dynamically-found instances
+        for sig in self.find_all_shop_bases():
+            self.pine.write32(self._shop_count_addr(sig), 0)
+        # Fallback: also zero the original hardcoded count address in case
+        # the game repopulated an instance we didn't find via scan
+        self.pine.write32(ADDR_SHOP_COUNT, 0)
 
     def read_capsule_owned(self, ownership_index: int) -> int:
         """Read whether a capsule is owned (1) or not (0)."""

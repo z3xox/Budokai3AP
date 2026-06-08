@@ -39,12 +39,21 @@ class RandomizeTransformations(Toggle):
 
 
 class StartingSaga(Choice):
-    """Which saga Goku starts with unlocked in Dragon Universe."""
+    """Which saga is unlocked at the start (only matters if Saga Lockout is on).
+    Saiyan saga is always available as the baseline."""
     display_name = "Starting Saga"
     option_saiyan = 0
     option_frieza = 1
     option_cell = 2
     option_buu = 3
+    default = 0
+
+
+class SagaLockout(Toggle):
+    """Lock Dragon Universe fights behind per-saga unlock items (Frieza, Cell,
+    Buu Saga Unlocks). Saiyan saga is always open. Adds progression depth.
+    Unlocks gate ALL characters' fights in that saga at once."""
+    display_name = "Saga Lockout"
     default = 0
 
 
@@ -102,6 +111,7 @@ class B3Options(PerGameCommonOptions):
     randomize_stages: RandomizeStages
     randomize_transformations: RandomizeTransformations
     starting_saga: StartingSaga
+    saga_lockout: SagaLockout
     shop_slots: ShopSlots
     drain_trap: DrainTrap
     required_du_completions: RequiredDUCompletions

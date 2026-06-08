@@ -53,11 +53,17 @@ class B3World(World):
     def create_items(self):
         pool = []
 
-        # Saga unlocks are NOT added to the pool — all sagas are open (the
-        # saga items are precollected only, so they'd be useless filler here).
+        # Saga unlocks: added to the pool only when Saga Lockout is on (the
+        # non-starting sagas, set up in generate_early). Otherwise precollected.
+        for saga_item in getattr(self, "_sagas_in_pool", []):
+            pool.append(create_item(self, saga_item))
 
-        # Character DU unlocks
+        # Character DU unlocks — skip the starting character (it's precollected,
+        # so adding it again would put a duplicate, findable copy in the pool).
+        starting = getattr(self, "starting_character", None)
         for name in CHARACTER_UNLOCK_ITEMS.values():
+            if name == starting:
+                continue
             pool.append(create_item(self, name))
 
         # Shop Restock items — one per 10 shop slots beyond the first 10
@@ -120,10 +126,27 @@ class B3World(World):
         self.starting_character = starting_char
 
 
-        # All sagas unlocked from the start (saga lockout not implemented yet)
-        self.multiworld.push_precollected(create_item(self, "Frieza Saga Unlock"))
-        self.multiworld.push_precollected(create_item(self, "Cell Saga Unlock"))
-        self.multiworld.push_precollected(create_item(self, "Buu Saga Unlock"))
+        # Saga unlocks
+        saga_items = {
+            0: None,  # Saiyan saga is always open (no item needed)
+            1: "Frieza Saga Unlock",
+            2: "Cell Saga Unlock",
+            3: "Buu Saga Unlock",
+        }
+        if int(self.options.saga_lockout.value):
+            # Lock sagas: precollect ONLY the starting saga; the rest go in pool.
+            start = int(self.options.starting_saga.value)
+            start_item = saga_items.get(start)
+            if start_item:
+                self.multiworld.push_precollected(create_item(self, start_item))
+            self._sagas_in_pool = [v for k, v in saga_items.items()
+                                   if v and k != start]
+        else:
+            # No lockout: all sagas open from the start (precollected).
+            for v in saga_items.values():
+                if v:
+                    self.multiworld.push_precollected(create_item(self, v))
+            self._sagas_in_pool = []
 
     def fill_slot_data(self) -> Mapping[str, Any]:
         return {

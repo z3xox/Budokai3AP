@@ -400,6 +400,9 @@ class B3Context(CommonContext):
         # starting the first fight and crashed PCSX2.)
         if screen == 0x0618:  # SCREEN_DA_CHARSEL (list)
             allowed = min((self.da_rank_ups + 1) * 10, self.da_fights_total)
+            # Always fresh lookup — never use cache on the list screen so we
+            # catch the struct immediately after returning from a fight.
+            self.iface._da_count_cache = None
             self.iface.clamp_da_opponent_count(allowed)
 
         # Win detection — ONLY on results/save screens, never during the battle
@@ -473,7 +476,9 @@ class B3Context(CommonContext):
         # the struct with its own random stock (our write got overwritten).
         visible = self._visible_shop_entries()
         if not visible:
-            # No capsules left to sell (all bought, awaiting a restock) — empty the shop
+            # No AP capsules available (all bought, waiting for restock).
+            # Keep clearing every poll so the game can't repopulate with its
+            # own stock after re-entry or relocation.
             self.iface.clear_shop()
             self._shop_was_open = True
             return
@@ -677,9 +682,32 @@ async def pcsx2_sync_task(ctx: B3Context):
                         else:
                             ctx.iface.lock_dragon_arena()
 
-            # Handle shop
+            # Reapply character locks immediately on arena charsel screen
+            # transition — the arena char-select re-initializes capsule display
+            # bytes on entry, temporarily showing all characters as unlocked.
+            _prev_arena_scr = getattr(ctx, "_prev_arena_charsel", False)
+            _on_arena_charsel = (ctx.iface.get_screen() == 0x0618)
+            if _on_arena_charsel and not _prev_arena_scr:
+                ctx.iface.apply_character_locks(ctx.unlocked_characters)
+                # Invalidate arena count cache so a fresh scan happens
+                ctx.iface._da_count_cache = None
+            ctx._prev_arena_charsel = _on_arena_charsel
+
+            # Handle shop — on transition TO the shop screen, immediately
+            # write our stock/clear BEFORE _handle_shop runs to win the race
+            # against the game's own shop-init routine.
             if ctx.slot_data and not ctx.shop_pool:
                 ctx._build_shop_pool()
+            _prev_shop_screen = getattr(ctx, "_prev_shop_screen", False)
+            _on_shop = ctx.iface.is_shop_open()
+            if _on_shop and not _prev_shop_screen:
+                # Transition: just entered shop screen. Fire immediately.
+                visible = ctx._visible_shop_entries()
+                if visible:
+                    ctx.iface.write_shop_stock([e for _, e in visible])
+                else:
+                    ctx.iface.clear_shop()
+            ctx._prev_shop_screen = _on_shop
             ctx._handle_shop()
 
             # Handle Dragon Arena

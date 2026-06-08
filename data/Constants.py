@@ -439,7 +439,7 @@ SHOP_OFF_COUNT_FROM_SIG = 0x88
 SHOP_OFF_ITEMS_FROM_SIG = 0x98
 # Scan window where the shop struct lives
 SHOP_SCAN_START = 0x00880000
-SHOP_SCAN_END   = 0x00890000
+SHOP_SCAN_END   = 0x008A0000  # covers 0x00880000-0x0089FFFF
 
 # Shop capsule pool: (display_index, ownership_index, name)
 # Up to 50 capsules. Shop shows 10 at a time, restock items unlock more.

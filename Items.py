@@ -74,7 +74,9 @@ def get_item_classification(name: str) -> ItemClassification:
         return ItemClassification.progression
     if name in CHARACTER_ITEMS:
         return ItemClassification.progression
-    if name == "Dragon Arena Ticket":
+    # These gate access to locations, so they MUST be progression (otherwise
+    # the generator can't sphere them and gated locations break).
+    if name in ("Dragon Arena Ticket", "Dragon Arena Rank Up", "Shop Restock"):
         return ItemClassification.progression
     if name in SPECIAL_ITEMS:
         return ItemClassification.useful
