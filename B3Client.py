@@ -441,6 +441,7 @@ class B3Context(CommonContext):
         if not on_shop_screen:
             self._shop_was_open = False
             self._last_written_slot0 = None
+            self._shop_qty_baseline = None
             return
 
         # Confirm the REAL shop is loaded by locating its anchor. If not found,
@@ -486,12 +487,57 @@ class B3Context(CommonContext):
         expected_slot0 = visible[0][1][0]  # display index we want in slot 0
         actual_slot0 = self.iface.read_shop_slot0_display()
 
+        # Watch for purchases via ownership flips — do this BEFORE re-asserting
+        # stock, otherwise we rewrite the just-bought item back into the shop
+        # before recording the purchase (causes an infinite restock loop).
+        # Watch for purchases. In BL the purchase table is the general capsule
+        # quantity inventory, so a non-zero value can mean "already owned from
+        # normal play", not "just bought". We therefore track a per-visit
+        # baseline and only fire when the quantity INCREASES above it.
+        vis_indices = getattr(self, "_visible_pool_indices", [])
+        baseline = getattr(self, "_shop_qty_baseline", None)
+        if baseline is None:
+            baseline = {}
+            for i in vis_indices:
+                disp_idx, own_idx, _ = self.shop_pool[i]
+                baseline[i] = self.iface.read_capsule_owned(own_idx, disp_idx)
+            self._shop_qty_baseline = baseline
+
+        purchase_made = False
+        for pool_idx in list(vis_indices):
+            if pool_idx in self.shop_purchased:
+                continue
+            disp_idx, own_idx, name = self.shop_pool[pool_idx]
+            cur = self.iface.read_capsule_owned(own_idx, disp_idx)
+            base = baseline.get(pool_idx, 0)
+            if cur > base:
+                logger.info(f"[B3] Shop purchase detected: {name} "
+                            f"(disp={disp_idx}, {base}->{cur})")
+                self.iface.clear_capsule_owned(own_idx, disp_idx)
+                self.shop_purchased.add(pool_idx)
+                purchase_made = True
+                loc_name = f"Shop: {name}"
+                if loc_name not in self.shop_checks_sent:
+                    self.shop_checks_sent.add(loc_name)
+                    asyncio.create_task(self._send_check(loc_name))
+                    logger.info(f"[B3] Shop check sent: {name} -> {loc_name}")
+        # Recompute visible after recording purchases so re-assert uses fresh set
+        visible = self._visible_shop_entries()
+        if not visible:
+            self.iface.clear_shop()
+            self._shop_was_open = True
+            return
+        expected_slot0 = visible[0][1][0]
+
         # Re-assert our stock whenever slot0 doesn't match what we expect,
         # OR whenever slot0 isn't any of our pool's display indices (meaning the
-        # game repopulated with its own stock — e.g. after World Tournament).
+        # game repopulated with its own stock — e.g. after World Tournament),
+        # OR right after a purchase (the game auto-refills emptied slots from
+        # its native stock, which we must overwrite with our reduced set).
         our_display_set = {e[0] for _i, e in
                            [(i, self.shop_pool[i]) for i in range(len(self.shop_pool))]}
-        if actual_slot0 != expected_slot0 or actual_slot0 not in our_display_set:
+        if (purchase_made or actual_slot0 != expected_slot0
+                or actual_slot0 not in our_display_set):
             self._refresh_shop()
             self._last_written_slot0 = expected_slot0
 
@@ -502,25 +548,8 @@ class B3Context(CommonContext):
             self._last_hinted_count = len(visible)
             asyncio.create_task(self._hint_shop_items())
 
-        # Watch for purchases via ownership flips
-        vis_indices = getattr(self, "_visible_pool_indices", [])
-        for pool_idx in list(vis_indices):
-            if pool_idx in self.shop_purchased:
-                continue
-            _disp, own_idx, name = self.shop_pool[pool_idx]
-            if self.iface.read_capsule_owned(own_idx) == 0x01:
-                self.iface.clear_capsule_owned(own_idx)
-                self.shop_purchased.add(pool_idx)
-                loc_name = f"Shop: {name}"
-                if loc_name not in self.shop_checks_sent:
-                    self.shop_checks_sent.add(loc_name)
-                    asyncio.create_task(self._send_check(loc_name))
-                    logger.info(f"[B3] Shop purchase: {name} -> {loc_name}")
-                self._refresh_shop()
-                self._last_written_slot0 = self._visible_shop_entries()[0][1][0] \
-                    if self._visible_shop_entries() else None
-
         self._shop_was_open = True
+        return
 
     async def _hint_shop_items(self):
         """Create AP hints for the capsules currently for sale, so the player
@@ -615,11 +644,13 @@ async def pcsx2_sync_task(ctx: B3Context):
                             ctx._build_shop_pool()
                         if not ctx.iface.any_fight_loading():
                             ctx.install_cave()
-                        # Important: if AP connects before PCSX2, cave2 was never installed.
-                        # Install the title/New Game character-lock hook here too.
-                        ctx.iface.install_cave2()
-                        ctx.iface.apply_character_locks(ctx.unlocked_characters)
-                        logger.info(f"[B3] Character locks/cave2 applied on game connect. Unlocked: {ctx.unlocked_characters}")
+                        # Install cave2 only when past title screen (screen != 0)
+                        # to avoid crashing on BL where the intercept fires during init.
+                        screen = ctx.iface.get_screen()
+                        if screen != 0:
+                            ctx.iface.install_cave2()
+                            ctx.iface.apply_character_locks(ctx.unlocked_characters)
+                            logger.info(f"[B3] Character locks/cave2 applied on game connect. Unlocked: {ctx.unlocked_characters}")
                     else:
                         logger.info("[B3] Connected to game. Waiting for AP server connection to install cave...")
                     # Check if cave needs reinstall
@@ -636,8 +667,8 @@ async def pcsx2_sync_task(ctx: B3Context):
                     logger.info("[B3] Cave missing, reinstalling...")
                     ctx.install_cave()
 
-            # Reinstall character-lock cave if it got wiped. This is separate from the fight randomizer cave.
-            if ctx.slot_data and not ctx.iface.cave2_installed():
+            # Reinstall character-lock cave if it got wiped. Skip on title screen (screen=0).
+            if ctx.slot_data and not ctx.iface.cave2_installed() and ctx.iface.get_screen() != 0:
                 logger.info("[B3] Cave2 missing, reinstalling character-lock hook...")
                 ctx.iface.install_cave2()
 
@@ -648,6 +679,14 @@ async def pcsx2_sync_task(ctx: B3Context):
 
             # DU Credits completion checks / YAML goal count
             await ctx._handle_du_completion(screen)
+
+            # During the credits/completion screen (0x010C) the game performs a
+            # heavy full-save. Suspend our memory writes here so a PINE write
+            # can't land mid-save and corrupt game state. Detection (reads) and
+            # server comms continue normally; we resume writes once off-screen.
+            if screen == 0x010C:
+                await asyncio.sleep(0.1)
+                continue
 
             # Reapply character locks on key screen transitions:
             # - 0x0004: title screen (save loaded here)

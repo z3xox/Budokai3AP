@@ -1,10 +1,181 @@
 # Dragon Ball Z Budokai 3 - Memory Address Constants
 # NTSC-U, SLUS-20998, CRC C97EF0A4
 
-GAME_ID = "SLUS-20998"
+GAME_ID  = "SLUS-20998"
 GAME_CRC = "c97ef0a4"
 
-# ─── Cave ────────────────────────────────────────────────────────────────────
+# ─── Supported Versions ───────────────────────────────────────────────────────
+# Version-specific addresses keyed by CRC (lowercase). The client loads the
+# matching entry on connect and overrides the defaults below.
+# Addresses not listed in a version entry fall back to the NTSC-U defaults.
+VERSIONS = {
+    "c97ef0a4": {  # NTSC-U, SLUS-20998
+        "game_id":          "SLUS-20998",
+        "addr_screen":      0x0046A5B0,
+        "addr_mode":        0x00543C20,
+        "addr_du_char":     0x00543C24,
+        "addr_zenie_rt":    0x00543D28,
+        "addr_zenie_du":    0x004C6F08,
+        "addr_zenie_saved": 0x00495568,
+        "addr_cave":        0x00600000,
+        "addr_intercept":   0x001B32A8,
+        "addr_return":      0x001B32AC,
+        "cave_jump":        0x08180000,   # j 0x00600000
+        "orig_instr":       0x864206B0,   # lh v0,0x6B0(s2)
+        "du_char_capsules": {
+            "Goku":        0x00495762,
+            "Kid Gohan":   0x00495764,
+            "Teen Gohan":  0x00495765,
+            "Adult Gohan": 0x00495766,
+            "Vegeta":      0x00495769,
+            "Krillin":     0x0049576C,
+            "Piccolo":     0x0049576D,
+            "Tien":        0x0049576E,
+            "Yamcha":      0x0049576F,
+            "Uub":         0x00495773,
+            "Broly":       0x00495784,
+        },
+        "addr_p1_char":     0x0044B5C0,
+        "addr_p1_char_t4":  0x0044B5C4,
+        "addr_p1_caps":     0x0044B5E4,
+        "addr_p2_char":     0x0044B610,
+        "addr_p2_char_t4":  0x0044B614,
+        "addr_p2_caps":     0x0044B634,
+        "addr_stage_select":0x0044B6F4,
+        "addr_battle_mod":  0x0044B708,
+        "addr_intercept2":  0x001F2B54,
+        "addr_return2":     0x001F2B5C,
+        "orig_instr2":      0x3C010002,
+        "addr_cave2":       0x00623000,
+        "addr_lock_table":  0x00622000,
+        "cave2_jump":       0x08188C00,   # j 0x00623000
+        "shop_off_items":   0x98,
+        "shop_off_count":   0x88,
+        "shop_off_zenie":   None,   # NTSC-U: live shop Zenie display refresh not mapped
+        "dragon_ball_addrs": {
+            "Goku":       0x0049D284,
+            "Kid Gohan":  0x0049F6A4,
+            "Teen Gohan": 0x004A08B4,
+            "Gohan":      0x004A1AC4,
+            "Vegeta":     0x004A50F4,
+            "Krillin":    0x004A8724,
+            "Piccolo":    0x004A9934,
+            "Tien":       0x004AAB44,
+            "Yamcha":     0x004ABD54,
+            "Uub":        0x004B0594,
+            "Broly":      0x004C38A4,
+        },
+        "rt_caps_base":     0x005510EF,
+        "du_rt_caps_base":  0x004C6F3B,
+        "da_clear_base":    0x00495A16,
+        "da_ticket_display":    0x0049579D,
+        "da_ticket_ownership":  0x005512F1,
+        "da_ticket_du_rt":      0x004C713D,
+        "shop_ownership_base":  0x005510C7,
+        "shop_purchase_base":   0x005510C7,   # NTSC-U: same as ownership, indexed by own_idx
+        "shop_purchase_by_display": False,
+        "addr_shop_count":  0x0088DCEC,
+        "du_bases": {
+            "Goku":       {"du_id": 0x00, "base": 0x0049D260},
+            "Kid Gohan":  {"du_id": 0x02, "base": 0x0049F680},
+            "Teen Gohan": {"du_id": 0x03, "base": 0x004A0890},
+            "Adult Gohan":{"du_id": 0x04, "base": 0x004A1AA0},
+            "Vegeta":     {"du_id": 0x07, "base": 0x004A50D0},
+            "Krillin":    {"du_id": 0x0A, "base": 0x004A8700},
+            "Piccolo":    {"du_id": 0x0B, "base": 0x004A9910},
+            "Tien":       {"du_id": 0x0C, "base": 0x004AAB20},
+            "Yamcha":     {"du_id": 0x0D, "base": 0x004ABD30},
+            "Uub":        {"du_id": 0x11, "base": 0x004B0570},
+            "Broly":      {"du_id": 0x22, "base": 0x004C3880},
+        },
+    },
+    "2a4b60eb": {  # Black Label (PAL/other), CRC 2A4B60EB
+        "game_id":          "SLES-XXXXX",  # update with real serial
+        "addr_screen":      0x004B4B40,
+        "addr_mode":        0x0058F660,
+        "addr_du_char":     0x0058F664,
+        "addr_zenie_rt":    0x0058F718,    # confirmed: persistent RT Zenie
+        "addr_zenie_du":    0x00511448,    # same address (DU_ZENIE was off-by-one)
+        "addr_zenie_saved": 0x004DFAE8,    # saved/memory-card Zenie (updates on save)
+        # Battle struct (confirmed via Goku vs Piccolo dump)
+        "addr_p1_char":     0x00496220,
+        "addr_p1_char_t4":  0x00496224,
+        "addr_p1_caps":     0x00496244,
+        "addr_p2_char":     0x00496270,
+        "addr_p2_char_t4":  0x00496274,
+        "addr_p2_caps":     0x00496294,
+        "addr_stage_select":0x00496354,
+        "addr_battle_mod":  0x00496368,   # STAGE + 0x14 (same offset as NTSC-U)
+        # Cave (confirmed: intercept at 0x001B119C, free mem at 0x00800000)
+        "addr_cave":        0x00800000,
+        "addr_debug":       0x00820000,
+        "addr_scratch":     0x00821000,
+        "addr_lock_table":  0x00822000,
+        "addr_cave2":       0x00823000,
+        "cave2_jump":       0x08208C00,   # j 0x00823000
+        "shop_off_items":   0x90,
+        "shop_off_count":   0x88,
+        "shop_off_zenie":   0x28,   # live Zenie display field inside ess_shop.c struct
+        "dragon_ball_addrs": {
+            "Goku":       0x004E77C4,
+            "Kid Gohan":  0x004E9BE4,
+            "Teen Gohan": 0x004EADF4,
+            "Gohan":      0x004EC004,
+            "Vegeta":     0x004EF634,
+            "Krillin":    0x004F2C64,
+            "Piccolo":    0x004F3E74,
+            "Tien":       0x004F5084,
+            "Yamcha":     0x004F6294,
+            "Uub":        0x004FAAD4,
+            "Broly":      0x0050DDE4,
+        },
+        "addr_intercept":   0x001B119C,
+        "addr_return":      0x001B11A0,
+        "cave_jump":        0x08200000,    # j 0x00800000
+        "orig_instr":       0x862307E2,    # lh v1,0x7E2(s0)
+        "addr_intercept2":  0x001EFD70,   # lui at,0x0002 — before jal z_un_0026dc80 commits values
+        "addr_return2":     0x001EFD74,   # daddu a0,s4,zero (let ori+jal run with our values)
+        "orig_instr2":      0x3C010002,   # lui at,0x0002
+        # Character lock display bytes (confirmed via manual testing)
+        "du_char_capsules": {
+            "Goku":        0x004DFCE2,
+            "Kid Gohan":   0x004DFCE4,
+            "Teen Gohan":  0x004DFCE5,
+            "Adult Gohan": 0x004DFCE6,
+            "Vegeta":      0x004DFCE9,
+            "Krillin":     0x004DFCEC,
+            "Piccolo":     0x004DFCED,
+            "Tien":        0x004DFCEE,
+            "Yamcha":      0x004DFCEF,
+            "Uub":         0x004DFCF3,
+            "Broly":       0x004DFD04,
+        },
+        "du_rt_caps_base":  0x0051147B,
+        "rt_caps_base":     0x0051147B,
+        "da_clear_base":    0x004DFF96,
+        "da_ticket_display":    0x004DFD1D,   # GHE display table (main menu)
+        "da_ticket_ownership":  0x0059CCA1,   # shop ownership table
+        "da_ticket_du_rt":      0x0051167D,   # RT/DU-RT table (DU context)
+        "shop_ownership_base":  0x00511453,   # RT_CAPS_BASE - 40 (same table, different offset)
+        "shop_purchase_base":   0x0059CA9D,   # BL: quantity table, indexed by DISPLAY index
+        "shop_purchase_by_display": True,
+        "du_bases": {
+            "Goku":       {"du_id": 0x00, "base": 0x004E77A0},
+            "Kid Gohan":  {"du_id": 0x02, "base": 0x004E9BC0},
+            "Teen Gohan": {"du_id": 0x03, "base": 0x004EADD0},
+            "Adult Gohan":{"du_id": 0x04, "base": 0x004EBFE0},
+            "Vegeta":     {"du_id": 0x07, "base": 0x004EF610},
+            "Krillin":    {"du_id": 0x0A, "base": 0x004F2C40},
+            "Piccolo":    {"du_id": 0x0B, "base": 0x004F3E50},
+            "Tien":       {"du_id": 0x0C, "base": 0x004F5060},
+            "Yamcha":     {"du_id": 0x0D, "base": 0x004F6270},
+            "Uub":        {"du_id": 0x11, "base": 0x004FAAB0},
+            "Broly":      {"du_id": 0x22, "base": 0x0050DDC0},
+        },
+    },
+}
+
+# ─── Cave ─────────────────────────────────────────────────────────────────────
 ADDR_CAVE          = 0x00600000   # cave code start
 ADDR_DEBUG         = 0x00620000   # debug area (hit counter, mode, char, battle)
 ADDR_SCRATCH       = 0x00621000   # register save area (t0,t1,t2,t3)
@@ -16,6 +187,13 @@ ORIG_INSTR         = 0x864206B0   # lh v0,0x6B0(s2)
 # ─── Game State ──────────────────────────────────────────────────────────────
 ADDR_SCREEN        = 0x0046A5B0   # 16-bit screen ID
 ADDR_MODE          = 0x00543C20   # DU mode byte (0x01 = DU)
+# Skill capsule table bases (overridden per-version). SKILL_CAPSULES holds
+# NTSC-U absolute addresses; apply_skill_locks translates them to the active
+# version using these bases.
+RT_CAPS_BASE       = 0x005510EF
+DU_RT_CAPS_BASE    = 0x004C6F3B
+NTSC_RT_CAPS_BASE    = 0x005510EF  # fixed reference for offset translation
+NTSC_DU_RT_CAPS_BASE = 0x004C6F3B  # fixed reference for offset translation
 ADDR_DU_CHAR       = 0x00543C24   # current DU character selector
 ADDR_ZENIE_RT      = 0x00543D28   # real-time Zenie (32-bit)
 ADDR_ZENIE_DU      = 0x004C6F08   # DU Zenie (32-bit)
@@ -421,6 +599,8 @@ ADDR_SHOP_STRUCT_BASE = 0x0088DCFC  # item structs, 20 bytes each
 SHOP_STRUCT_SIZE      = 0x14         # 20 bytes per entry (confirmed: disp,recv,price,flags,extra)
 SHOP_DISPLAY_BASE     = 0x495599     # display_index = def_addr - this
 SHOP_OWNERSHIP_BASE   = 0x005510C7   # ownership: base + own_index
+SHOP_PURCHASE_BASE        = 0x005510C7   # purchase-detection table (per version)
+SHOP_PURCHASE_BY_DISPLAY  = False        # BL indexes by display, NTSC-U by own_idx
 SHOP_PRICE            = 1500
 SHOP_MAX_SLOTS        = 10
 
@@ -437,9 +617,10 @@ SHOP_SIG0 = 0x5F737365   # 'ess_'
 SHOP_SIG1 = 0x706F6873   # 'shop'
 SHOP_OFF_COUNT_FROM_SIG = 0x88
 SHOP_OFF_ITEMS_FROM_SIG = 0x98
+SHOP_OFF_ZENIE_FROM_SIG = None   # live shop Zenie display (BL only)
 # Scan window where the shop struct lives
 SHOP_SCAN_START = 0x00880000
-SHOP_SCAN_END   = 0x008A0000  # covers 0x00880000-0x0089FFFF
+SHOP_SCAN_END   = 0x008E0000  # covers 0x00880000-0x008DFFFF including BL region
 
 # Shop capsule pool: (display_index, ownership_index, name)
 # Up to 50 capsules. Shop shows 10 at a time, restock items unlock more.

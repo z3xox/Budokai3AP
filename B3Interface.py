@@ -11,7 +11,7 @@ from typing import Optional
 from logging import Logger
 
 from .data.Constants import (
-    GAME_ID, GAME_CRC, DU_BASES, FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS,
+    GAME_ID, GAME_CRC, VERSIONS, DU_BASES, FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS,
     ADDR_CAVE, ADDR_DEBUG, ADDR_SCRATCH, ADDR_INTERCEPT, ADDR_RETURN,
     CAVE_JUMP, ORIG_INSTR,
     ADDR_SCREEN, ADDR_MODE, ADDR_DU_CHAR, ADDR_ZENIE_RT,
@@ -22,10 +22,14 @@ from .data.Constants import (
     ADDR_SHOP_STRUCT_BASE, SHOP_STRUCT_SIZE, SHOP_DISPLAY_BASE,
     SHOP_OWNERSHIP_BASE, SHOP_PRICE, SHOP_MAX_SLOTS, ADDR_SHOP_COUNT,
     SHOP_SIG0, SHOP_SIG1, SHOP_OFF_COUNT_FROM_SIG, SHOP_OFF_ITEMS_FROM_SIG,
+    SHOP_OFF_ZENIE_FROM_SIG,
     SHOP_SCAN_START, SHOP_SCAN_END,
     SHOP_OFF_DISPLAY, SHOP_OFF_RECEIVED, SHOP_OFF_PRICE, SHOP_OFF_FLAGS,
     SHOP_CAPSULE_POOL,
     SKILL_CAPSULES,
+    RT_CAPS_BASE, DU_RT_CAPS_BASE,
+    NTSC_RT_CAPS_BASE, NTSC_DU_RT_CAPS_BASE,
+    SHOP_PURCHASE_BASE, SHOP_PURCHASE_BY_DISPLAY,
     SCREEN_DA_CHARSEL, SCREEN_DA_BATTLE, SCREEN_DA_RESULTS,
     DA_TICKET_DISPLAY, DA_TICKET_OWNERSHIP, DA_TICKET_DU_RT,
     ADDR_DA_OPP_COUNT, ADDR_DA_CLEAR_BASE, DA_FIGHT_COUNT,
@@ -217,8 +221,86 @@ def cap_word(bt_id: int) -> int:
     return ((bt_id & 0xFFFF) << 16) | 0x0007
 
 
+def build_cave2() -> bytes:
+    """
+    Build cave2 code dynamically from the current version's addresses.
+    This replaces the hardcoded CAVE2_CODE bytes so it works for any version.
+    """
+    import struct as _struct
+
+    def _lui(rt, imm):   return _struct.pack("<I",(0x0F<<26)|(0<<21)|(rt<<16)|(imm&0xFFFF))
+    def _ori(rt,rs,imm): return _struct.pack("<I",(0x0D<<26)|(rs<<21)|(rt<<16)|(imm&0xFFFF))
+    def _sw(rt,off,base):return _struct.pack("<I",(0x2B<<26)|(base<<21)|(rt<<16)|(off&0xFFFF))
+    def _lw(rt,off,base):return _struct.pack("<I",(0x23<<26)|(base<<21)|(rt<<16)|(off&0xFFFF))
+    def _lbu(rt,off,base):return _struct.pack("<I",(0x24<<26)|(base<<21)|(rt<<16)|(off&0xFFFF))
+    def _sb(rt,off,base): return _struct.pack("<I",(0x28<<26)|(base<<21)|(rt<<16)|(off&0xFFFF))
+    def _j(addr):        return _struct.pack("<I",(0x02<<26)|((addr>>2)&0x3FFFFFF))
+    def _nop():          return _struct.pack("<I",0)
+    def load_addr_code(reg, addr):
+        hi = (addr >> 16) & 0xFFFF
+        lo = addr & 0xFFFF
+        code = _lui(reg, hi)
+        if lo:
+            code += _ori(reg, reg, lo)
+        return code
+
+    # Register numbers
+    AT, T0, T1, T2 = 1, 8, 9, 10
+
+    # Get addresses from current module-level constants
+    scratch_save = ADDR_SCRATCH + 0x80   # use a safe offset within scratch
+    lock_table   = ADDR_LOCK_TABLE
+    return_addr  = ADDR_RETURN2
+    chars = DU_CHAR_CAPSULES  # {name: display_byte_addr}
+    char_order = ["Goku","Kid Gohan","Teen Gohan","Adult Gohan","Vegeta",
+                  "Krillin","Piccolo","Tien","Yamcha","Uub","Broly"]
+
+    code = b""
+    # Original instruction
+    code += _struct.pack("<I", ORIG_INSTR2)
+
+    # Save t0, t1
+    code += load_addr_code(T2, scratch_save)
+    code += _sw(T0, 0, T2)
+    code += _sw(T1, 4, T2)
+
+    # Load lock table base into t0
+    code += load_addr_code(T0, lock_table)
+
+    # For each character: lbu t1, index(t0) + sb t1, display_byte
+    for i, name in enumerate(char_order):
+        disp_addr = chars.get(name)
+        if disp_addr is None:
+            continue
+        code += _lbu(T1, i, T0)
+        # lui+sb: if lo >= 0x8000, sign extension makes offset negative.
+        # Compensate by incrementing hi by 1.
+        hi = (disp_addr >> 16) & 0xFFFF
+        lo = disp_addr & 0xFFFF
+        if lo >= 0x8000:
+            hi = (hi + 1) & 0xFFFF
+        code += _lui(AT, hi)
+        code += _sb(T1, lo, AT)
+
+    # Restore t0, t1
+    code += load_addr_code(T2, scratch_save)
+    code += _lw(T0, 0, T2)
+    code += _lw(T1, 4, T2)
+
+    # Re-execute the original instruction to restore the 'at' register to the
+    # state the game expects at return_addr. Our lock writes clobber 'at' (via
+    # lui at,0x004E), so without this the game's subsequent ori at,at,... +
+    # use of 'at' would compute a wrong address and corrupt the save commit.
+    code += _struct.pack("<I", ORIG_INSTR2)
+
+    # Jump back
+    code += _j(return_addr)
+    code += _nop()
+
+    return code
+
+
 def build_cave(matchups: dict, randomize_stages: bool = True) -> bytes:
-    # Validate matchups
     for key, data in matchups.items():
         assert "p1" in data and "p2" in data, f"Missing p1/p2 in {key}"
         assert "char" in data["p1"] and "bt" in data["p1"], f"Missing char/bt in p1 for {key}"
@@ -364,6 +446,8 @@ class B3Interface:
         self._cave_installed = False
         self._da_count_cache = None  # cached arena count address (per session)
         self._shop_sig_cache = None  # cached ess_shop.c anchor (per load)
+        self._cave_supported = True  # False for versions without cave addresses
+        self._version = VERSIONS.get(GAME_CRC, {})
         self._installed_cave_code = None
         self._prev_screen = -1
         self._prev_battle_states: dict = {}   # char_name → last battle state
@@ -379,19 +463,80 @@ class B3Interface:
             crc = self.pine.get_game_crc()
             gid = self.pine.get_game_id()
             self.logger.info(f"[B3] Game: {gid!r} CRC: {crc!r}")
-            if crc == GAME_CRC:
-                self._game_id = gid or GAME_ID
-                self.logger.info(f"[B3] Connected to PCSX2 - DBZ Budokai 3 NTSC-U confirmed")
-                return True
-            elif not crc:
+            if not crc:
                 self.logger.warning("[B3] CRC empty - game may still be loading")
                 return False
-            else:
-                self.logger.warning(f"[B3] Wrong game CRC: {crc!r} (expected {GAME_CRC})")
+            ver = VERSIONS.get(crc.lower())
+            if ver is None:
+                self.logger.warning(f"[B3] Unsupported game CRC: {crc!r}")
                 return False
+            self._game_id = gid or ver.get("game_id", GAME_ID)
+            self._version = ver
+            self._load_version_addrs(ver)
+            self.logger.info(f"[B3] Connected - DBZ Budokai 3 ({crc.upper()})")
+            return True
         except Exception as e:
             self.logger.warning(f"[B3] Connect error: {e}")
             return False
+
+    def _load_version_addrs(self, ver: dict):
+        """Override module-level address constants with version-specific values."""
+        import sys
+        mod = sys.modules[__name__]
+        mapping = {
+            "addr_p1_char":         "ADDR_P1_CHAR",
+            "addr_p1_char_t4":      "ADDR_P1_CHAR_T4",
+            "addr_p1_caps":         "ADDR_P1_CAPS",
+            "addr_p2_char":         "ADDR_P2_CHAR",
+            "addr_p2_char_t4":      "ADDR_P2_CHAR_T4",
+            "addr_p2_caps":         "ADDR_P2_CAPS",
+            "addr_stage_select":    "ADDR_STAGE_SELECT",
+            "addr_battle_mod":      "ADDR_BATTLE_MOD",
+            "addr_screen":          "ADDR_SCREEN",
+            "addr_mode":            "ADDR_MODE",
+            "addr_du_char":         "ADDR_DU_CHAR",
+            "addr_zenie_rt":        "ADDR_ZENIE_RT",
+            "addr_zenie_du":        "ADDR_ZENIE_DU",
+            "addr_zenie_saved":     "ADDR_ZENIE_SAVED",
+            "addr_cave":            "ADDR_CAVE",
+            "addr_debug":           "ADDR_DEBUG",
+            "addr_scratch":         "ADDR_SCRATCH",
+            "addr_intercept":       "ADDR_INTERCEPT",
+            "addr_return":          "ADDR_RETURN",
+            "cave_jump":            "CAVE_JUMP",
+            "orig_instr":           "ORIG_INSTR",
+            "addr_intercept2":      "ADDR_INTERCEPT2",
+            "addr_return2":         "ADDR_RETURN2",
+            "orig_instr2":          "ORIG_INSTR2",
+            "addr_cave2":           "ADDR_CAVE2",
+            "cave2_jump":           "CAVE2_JUMP",
+            "shop_off_items":       "SHOP_OFF_ITEMS_FROM_SIG",
+            "shop_off_count":       "SHOP_OFF_COUNT_FROM_SIG",
+            "shop_off_zenie":       "SHOP_OFF_ZENIE_FROM_SIG",
+            "dragon_ball_addrs":    "DRAGON_BALL_ADDRS",
+            "shop_purchase_base":       "SHOP_PURCHASE_BASE",
+            "shop_purchase_by_display": "SHOP_PURCHASE_BY_DISPLAY",
+            "addr_lock_table":      "ADDR_LOCK_TABLE",
+            "rt_caps_base":         "RT_CAPS_BASE",
+            "du_rt_caps_base":      "DU_RT_CAPS_BASE",
+            "da_clear_base":        "ADDR_DA_CLEAR_BASE",
+            "da_ticket_display":    "DA_TICKET_DISPLAY",
+            "da_ticket_ownership":  "DA_TICKET_OWNERSHIP",
+            "da_ticket_du_rt":      "DA_TICKET_DU_RT",
+            "shop_ownership_base":  "SHOP_OWNERSHIP_BASE",
+            "du_char_capsules":     "DU_CHAR_CAPSULES",
+            "du_bases":             "DU_BASES",
+        }
+        for ver_key, const_name in mapping.items():
+            if ver_key in ver and ver[ver_key] is not None:
+                setattr(mod, const_name, ver[ver_key])
+                self.logger.debug(f"[B3] {const_name} = {ver[ver_key]!r}")
+        # Disable features that have None addresses (e.g. cave for unsupported version)
+        if ver.get("addr_intercept") is None:
+            self._cave_supported = False
+            self.logger.info("[B3] Fight cave not supported for this version — randomization disabled")
+        else:
+            self._cave_supported = True
 
     def disconnect(self):
         self.pine.disconnect()
@@ -424,7 +569,9 @@ class B3Interface:
             return False
 
     def install_cave(self, cave_code: bytes):
-        # Verify cave fits in allocated space
+        if not self._cave_supported:
+            self.logger.info("[B3] Cave install skipped — not supported for this version")
+            return
         if len(cave_code) > 0x10000:
             self.logger.error(f"[B3] Cave too large: {len(cave_code)} bytes!")
             return
@@ -622,13 +769,16 @@ class B3Interface:
         return True
 
     def grant_skill(self, skill_name: str):
-        """Grant a skill capsule by writing 1 to its DU-RT and RT addresses."""
+        """Grant a skill capsule by writing 1 to its DU-RT and RT addresses.
+        SKILL_CAPSULES holds NTSC-U addresses; translate to the active version."""
         entry = SKILL_CAPSULES.get(skill_name)
         if not entry:
             return
         du_rt, rt = entry
-        self.pine.write8(du_rt, 0x01)
-        self.pine.write8(rt, 0x01)
+        du_rt_shift = DU_RT_CAPS_BASE - NTSC_DU_RT_CAPS_BASE
+        rt_shift    = RT_CAPS_BASE - NTSC_RT_CAPS_BASE
+        self.pine.write8(du_rt + du_rt_shift, 0x01)
+        self.pine.write8(rt + rt_shift, 0x01)
 
     def read_dragon_ball_byte(self, char_name: str) -> int:
         """Read a character's Dragon Ball collection bitfield (bits 0-6)."""
@@ -650,11 +800,17 @@ class B3Interface:
         Write the full skill lock state: 1 for AP-granted skills, 0 for all
         others. This gates skills so the player can only obtain them via AP,
         suppressing natural in-game unlocks. Call only on DU world map / shop.
+
+        SKILL_CAPSULES holds NTSC-U absolute addresses. We translate each to the
+        active version using the per-version cap-table bases (offsets are
+        identical across versions). On NTSC-U the translation is a no-op.
         """
+        rt_shift   = RT_CAPS_BASE - NTSC_RT_CAPS_BASE
+        du_rt_shift = DU_RT_CAPS_BASE - NTSC_DU_RT_CAPS_BASE
         for skill_name, (du_rt, rt) in SKILL_CAPSULES.items():
             val = 0x01 if skill_name in granted else 0x00
-            self.pine.write8(du_rt, val)
-            self.pine.write8(rt, val)
+            self.pine.write8(du_rt + du_rt_shift, val)
+            self.pine.write8(rt + rt_shift, val)
 
     # ── Dragon Arena ──────────────────────────────────────────────────────────
 
@@ -765,9 +921,13 @@ class B3Interface:
         # the game repopulated an instance we didn't find via scan
         self.pine.write32(ADDR_SHOP_COUNT, 0)
 
-    def read_capsule_owned(self, ownership_index: int) -> int:
-        """Read whether a capsule is owned (1) or not (0)."""
-        return self.pine.read8(SHOP_OWNERSHIP_BASE + ownership_index)
+    def read_capsule_owned(self, ownership_index: int, display_index: int = None) -> int:
+        """Read whether a capsule was purchased.
+        BL uses the quantity table indexed by display index; NTSC-U uses the
+        ownership table indexed by own_idx."""
+        if SHOP_PURCHASE_BY_DISPLAY and display_index is not None:
+            return self.pine.read8(SHOP_PURCHASE_BASE + display_index)
+        return self.pine.read8(SHOP_PURCHASE_BASE + ownership_index)
 
     def read_shop_slot0_display(self) -> int:
         """Read the display index of shop slot 0 (to detect game repopulation).
@@ -777,9 +937,13 @@ class B3Interface:
             return -1
         return self.pine.read32(self._shop_items_addr(sig) + SHOP_OFF_DISPLAY)
 
-    def clear_capsule_owned(self, ownership_index: int):
-        """Reset ownership to 0 — we use capsules as AP triggers, player doesn't keep them."""
-        self.pine.write8(SHOP_OWNERSHIP_BASE + ownership_index, 0x00)
+    def clear_capsule_owned(self, ownership_index: int, display_index: int = None):
+        """Reset purchase flag to 0 — capsules are AP triggers, not kept.
+        BL clears the quantity table by display index; NTSC-U the ownership table."""
+        if SHOP_PURCHASE_BY_DISPLAY and display_index is not None:
+            self.pine.write8(SHOP_PURCHASE_BASE + display_index, 0x00)
+        else:
+            self.pine.write8(SHOP_PURCHASE_BASE + ownership_index, 0x00)
 
     # ── Saga lockout ─────────────────────────────────────────────────────────
 
@@ -801,16 +965,26 @@ class B3Interface:
 
     def cave2_installed(self) -> bool:
         try:
+            if ADDR_INTERCEPT2 is None:
+                return False
             return self.pine.read32(ADDR_INTERCEPT2) == CAVE2_JUMP
         except Exception:
             return False
 
     def install_cave2(self):
-        # Install the character-lock cave first, verify that it actually landed,
-        # then install the hook. This prevents 0x001F2B54 from jumping into
-        # garbage if the cave write failed or the cave address changed.
-        self.pine.write_bytes(ADDR_CAVE2, CAVE2_CODE)
-        expected_first = int.from_bytes(CAVE2_CODE[:4], "little")
+        if ADDR_INTERCEPT2 is None:
+            self.logger.info("[B3] Cave2 (char locks) not supported for this version")
+            return
+        # Use hardcoded bytes for NTSC-U (verified working), dynamic for other versions
+        crc = getattr(self, '_version', {}).get('game_id', '')
+        if ADDR_INTERCEPT2 == 0x001F2B54:
+            # NTSC-U — use the tested hardcoded cave2 bytes
+            cave2_code = CAVE2_CODE
+        else:
+            # Other versions (BL etc.) — generate dynamically
+            cave2_code = build_cave2()
+        self.pine.write_bytes(ADDR_CAVE2, cave2_code)
+        expected_first = int.from_bytes(cave2_code[:4], "little")
         actual_first = self.pine.read32(ADDR_CAVE2)
         if actual_first != expected_first:
             self.logger.error(
@@ -818,7 +992,6 @@ class B3Interface:
                 f"expected 0x{expected_first:08X}, got 0x{actual_first:08X}; hook not installed"
             )
             return
-
         self.pine.write32(ADDR_INTERCEPT2, CAVE2_JUMP)
         if self.cave2_installed():
             self.logger.info(f"[B3] Cave2 (char locks) installed at 0x{ADDR_CAVE2:08X}")
@@ -835,10 +1008,14 @@ class B3Interface:
             self.pine.write8(ADDR_LOCK_TABLE + i, val)
 
     def write_zenie(self, amount: int):
-        """Add Zenie to all three counters so every context (shop, DU, saved)
-        reflects it: real-time (0x543D28), DU total (0x4C6F08), and the
-        memory-card/saved total (0x495568)."""
+        """Add Zenie to all distinct counters so every context (shop, DU, saved)
+        reflects it. Addresses are de-duplicated so versions where two counters
+        share an address (e.g. BL saved==DU) don't double-add."""
+        seen = set()
         for addr in (ADDR_ZENIE_RT, ADDR_ZENIE_DU, ADDR_ZENIE_SAVED):
+            if addr is None or addr in seen:
+                continue
+            seen.add(addr)
             try:
                 current = self.pine.read32(addr)
                 self.pine.write32(addr, current + amount)

@@ -227,11 +227,11 @@ def create_regions(world):
             multiworld.regions.append(region)
 
             # Connect from menu with access rules
-            entrance = menu.connect(region, rule=lambda state,
-                                    cn=char_unlock, sn=saga_name: (
+            entrance = menu.connect(region)
+            entrance.access_rule = (lambda cn, sn: lambda state: (
                 (cn is None or state.has(cn, player)) and
                 (sn == "Saiyan" or
                  (sn == "Frieza" and state.has("Frieza Saga Unlock", player)) or
                  (sn == "Cell"   and state.has("Cell Saga Unlock", player)) or
                  (sn == "Buu"    and state.has("Buu Saga Unlock", player)))
-            ))
+            ))(char_unlock, saga_name)
