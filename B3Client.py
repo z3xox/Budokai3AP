@@ -21,7 +21,7 @@ from NetUtils import NetworkItem, ClientStatus
 from .B3Interface import B3Interface, build_cave
 from .data.Constants import (
     FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS,
-    SAGA_UNLOCK_IDS, DU_BASES,
+    DU_BASES,
 )
 
 
@@ -105,6 +105,7 @@ class B3Context(CommonContext):
         self.completed_dus: set = set()
         self._prev_screen_du_complete: int = -1
         self._goal_sent: bool = False
+        self._dark_star_balls_received: int = 0
 
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
@@ -165,11 +166,14 @@ class B3Context(CommonContext):
 
     def _apply_item(self, name: str):
         """Write the effect of a received item to game memory."""
-        if name in SAGA_UNLOCK_IDS:
-            # Saga lockout not implemented yet — sagas are always open
-            logger.info(f"[B3] Saga item received (no lockout): {name}")
+        if name == "Dark Star Dragon Ball":
+            self._dark_star_balls_received += 1
+            logger.info(f"[B3] Dark Star Dragon Ball collected "
+                        f"({self._dark_star_balls_received} total)")
+            asyncio.create_task(self._maybe_send_goal())
+            return
 
-        elif name.endswith(" DU"):
+        if name.endswith(" DU"):
             char = name[:-3]
             self.unlocked_characters.add(char)
             self.iface.show_character(char)
@@ -616,13 +620,35 @@ class B3Context(CommonContext):
         else:
             logger.info(f"[B3] DU credits reached again: {loc_name} already counted")
 
-        required = int(self.slot_data.get("required_du_completions", 1)) if self.slot_data else 1
-        required = max(1, min(required, 11))
-        if not self._goal_sent and len(self.completed_dus) >= required:
-            if self.server and self.slot:
-                await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+        await self._maybe_send_goal()
+
+    async def _maybe_send_goal(self):
+        """Goal-aware victory check: DU completions, Dark Star Dragon Balls, or
+        both, per the 'goal' slot_data option."""
+        if self._goal_sent or not (self.server and self.slot):
+            return
+        sd = self.slot_data or {}
+        goal = int(sd.get("goal", 0))
+
+        required_du = max(1, min(int(sd.get("required_du_completions", 1)), 11))
+        du_ok = len(self.completed_dus) >= required_du
+
+        balls_required = int(sd.get("dark_star_balls_required", 7))
+        balls_have = self._dark_star_balls_received
+        balls_ok = balls_have >= balls_required
+
+        if goal == 1:        # dark_star_dragon_balls
+            met = balls_ok
+        elif goal == 2:      # both
+            met = du_ok and balls_ok
+        else:                # du_completions
+            met = du_ok
+
+        if met:
+            await self.send_msgs([{"cmd": "StatusUpdate",
+                                   "status": ClientStatus.CLIENT_GOAL}])
             self._goal_sent = True
-            logger.info(f"[B3] Goal achieved: {len(self.completed_dus)}/{required} DU completions")
+            logger.info(f"[B3] Goal achieved (goal={goal}).")
 
 
 # ─── PCSX2 SYNC TASK ─────────────────────────────────────────────────────────

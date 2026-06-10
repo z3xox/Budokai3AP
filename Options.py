@@ -38,25 +38,6 @@ class RandomizeTransformations(Toggle):
     default = 0
 
 
-class StartingSaga(Choice):
-    """Which saga is unlocked at the start (only matters if Saga Lockout is on).
-    Saiyan saga is always available as the baseline."""
-    display_name = "Starting Saga"
-    option_saiyan = 0
-    option_frieza = 1
-    option_cell = 2
-    option_buu = 3
-    default = 0
-
-
-class SagaLockout(Toggle):
-    """Lock Dragon Universe fights behind per-saga unlock items (Frieza, Cell,
-    Buu Saga Unlocks). Saiyan saga is always open. Adds progression depth.
-    Unlocks gate ALL characters' fights in that saga at once."""
-    display_name = "Saga Lockout"
-    default = 0
-
-
 class ShopSlots(Range):
     """Number of AP shop capsule locations (0 to disable). Shop shows 10 at a time; restocks reveal more."""
     display_name = "Shop Slots"
@@ -69,6 +50,38 @@ class DrainTrap(Toggle):
     """Include HP Drain Trap items in the item pool."""
     display_name = "Drain Traps"
     default = 0
+
+
+class Goal(Choice):
+    """How to win.
+      du_completions      = complete the required number of Dragon Universe runs
+      dark_star_dragon_balls = collect the required number of Dark Star Dragon
+                               Balls (shuffled McGuffins) scattered in the pool
+      both                = satisfy BOTH conditions
+    """
+    display_name = "Goal"
+    option_du_completions = 0
+    option_dark_star_dragon_balls = 1
+    option_both = 2
+    default = 1
+
+
+class DarkStarBallsRequired(Range):
+    """How many Dark Star Dragon Balls must be collected to win (for the
+    dark_star_dragon_balls / both goals)."""
+    display_name = "Dark Star Dragon Balls Required"
+    range_start = 1
+    range_end = 7
+    default = 7
+
+
+class DarkStarBallsTotal(Range):
+    """How many Dark Star Dragon Balls are placed in the pool. Should be >= the
+    required count; extras make them easier to find."""
+    display_name = "Dark Star Dragon Balls Total"
+    range_start = 1
+    range_end = 7
+    default = 7
 
 
 class RequiredDUCompletions(Range):
@@ -86,7 +99,7 @@ class DragonArenaFights(Range):
     display_name = "Dragon Arena Fights"
     range_start = 0
     range_end = 380
-    default = 0
+    default = 10
 
 
 class Arenasanity(Toggle):
@@ -98,20 +111,21 @@ class Arenasanity(Toggle):
 
 class Dragonsanity(Toggle):
     """Add Dragon Ball collection (7 per DU character = 77) and Shenron wishes
-    (1 per character = 11) as checks. Disabled by default."""
+    (1 per character = 11) as checks. Enabled by default."""
     display_name = "Dragonsanity"
-    default = 0
+    default = 1
 
 
 @dataclass
 class B3Options(PerGameCommonOptions):
+    goal: Goal
+    dark_star_balls_required: DarkStarBallsRequired
+    dark_star_balls_total: DarkStarBallsTotal
     randomize_fights: RandomizeFights
     randomize_player1: RandomizePlayer1
     randomize_player2: RandomizePlayer2
     randomize_stages: RandomizeStages
     randomize_transformations: RandomizeTransformations
-    starting_saga: StartingSaga
-    saga_lockout: SagaLockout
     shop_slots: ShopSlots
     drain_trap: DrainTrap
     required_du_completions: RequiredDUCompletions

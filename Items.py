@@ -5,15 +5,6 @@ B3_BASE_ID = 0xDB3000
 class B3Item(Item):
     game = "Dragon Ball Z Budokai 3"
 
-# ─── Saga Unlock Items ───────────────────────────────────────────────────────
-# These gate progression through Dragon Universe sagas.
-
-SAGA_ITEMS = {
-    "Frieza Saga Unlock":  B3_BASE_ID + 0x01,
-    "Cell Saga Unlock":    B3_BASE_ID + 0x02,
-    "Buu Saga Unlock":     B3_BASE_ID + 0x03,
-}
-
 # ─── DU Character Unlock Items ───────────────────────────────────────────────
 # Unlocks a character's Dragon Universe campaign.
 
@@ -60,23 +51,31 @@ SPECIAL_ITEMS = {
     "Dragon Arena Rank Up":  B3_BASE_ID + 0x302,
 }
 
+# ─── Dark Star Dragon Ball (McGuffin goal item) ──────────────────────────────
+# A single named progression item placed in the pool `dark_star_balls_total`
+# times; collect `dark_star_balls_required` to satisfy the McGuffin goal.
+DARK_STAR_BALL_ITEM = "Dark Star Dragon Ball"
+MCGUFFIN_ITEMS = {
+    DARK_STAR_BALL_ITEM: B3_BASE_ID + 0x310,
+}
+
 # ─── Full item table ──────────────────────────────────────────────────────────
 
 item_table = {}
-item_table.update(SAGA_ITEMS)
 item_table.update(CHARACTER_ITEMS)
 item_table.update(CAPSULE_ITEMS)
 item_table.update(TRAP_ITEMS)
 item_table.update(SPECIAL_ITEMS)
+item_table.update(MCGUFFIN_ITEMS)
 
 def get_item_classification(name: str) -> ItemClassification:
-    if name in SAGA_ITEMS:
-        return ItemClassification.progression
     if name in CHARACTER_ITEMS:
         return ItemClassification.progression
     # These gate access to locations, so they MUST be progression (otherwise
     # the generator can't sphere them and gated locations break).
     if name in ("Dragon Arena Ticket", "Dragon Arena Rank Up", "Shop Restock"):
+        return ItemClassification.progression
+    if name in MCGUFFIN_ITEMS:
         return ItemClassification.progression
     if name in SPECIAL_ITEMS:
         return ItemClassification.useful

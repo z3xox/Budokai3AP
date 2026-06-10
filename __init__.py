@@ -4,7 +4,7 @@ logger = logging.getLogger(__name__)
 from BaseClasses import Item, ItemClassification, Tutorial
 from worlds.AutoWorld import World, WebWorld
 from .Items import (item_table, create_item,
-                    SAGA_ITEMS, CHARACTER_ITEMS, CAPSULE_ITEMS, TRAP_ITEMS)
+                    CHARACTER_ITEMS, CAPSULE_ITEMS, TRAP_ITEMS)
 from .Locations import location_table, get_location_names, DU_BATTLE_LOCATIONS, SHOP_LOCATIONS, DU_COMPLETION_LOCATIONS
 from .Options import B3Options
 from .Regions import create_regions, CHARACTER_UNLOCK_ITEMS
@@ -53,11 +53,6 @@ class B3World(World):
     def create_items(self):
         pool = []
 
-        # Saga unlocks: added to the pool only when Saga Lockout is on (the
-        # non-starting sagas, set up in generate_early). Otherwise precollected.
-        for saga_item in getattr(self, "_sagas_in_pool", []):
-            pool.append(create_item(self, saga_item))
-
         # Character DU unlocks — skip the starting character (it's precollected,
         # so adding it again would put a duplicate, findable copy in the pool).
         starting = getattr(self, "starting_character", None)
@@ -87,6 +82,15 @@ class B3World(World):
         for name in skill_names:
             pool.append(create_item(self, name))
 
+        # Dark Star Dragon Balls (McGuffin goal items), if the goal uses them.
+        from .Items import DARK_STAR_BALL_ITEM
+        if int(self.options.goal.value) in (1, 2):  # dark_star or both
+            total = int(self.options.dark_star_balls_total.value)
+            required = int(self.options.dark_star_balls_required.value)
+            total = max(total, required)  # never fewer than required
+            for _ in range(total):
+                pool.append(create_item(self, DARK_STAR_BALL_ITEM))
+
         # Pad any remaining locations with generic filler (Zenie / traps),
         # NOT by repeating skills.
         total_locs  = len(self.multiworld.get_unfilled_locations(self.player))
@@ -105,18 +109,32 @@ class B3World(World):
         self.multiworld.itempool.extend(pool)
 
     def set_rules(self):
-        # Victory condition: complete/reach the configured number of DU campaigns.
+        from .Items import DARK_STAR_BALL_ITEM
+        # DU completion goal component.
         du_completion_names = list(DU_COMPLETION_LOCATIONS.keys())
         required_du_count = min(
             int(self.options.required_du_completions.value),
             len(du_completion_names),
         )
-        self.multiworld.completion_condition[self.player] = lambda state: (
-            sum(
+
+        def du_goal_met(state):
+            return sum(
                 1 for location_name in du_completion_names
                 if state.can_reach(location_name, "Location", self.player)
             ) >= required_du_count
-        )
+
+        def balls_goal_met(state):
+            return state.has(DARK_STAR_BALL_ITEM, self.player,
+                             int(self.options.dark_star_balls_required.value))
+
+        goal = int(self.options.goal.value)
+        if goal == 1:      # dark_star_dragon_balls only
+            self.multiworld.completion_condition[self.player] = balls_goal_met
+        elif goal == 2:    # both
+            self.multiworld.completion_condition[self.player] = (
+                lambda state: du_goal_met(state) and balls_goal_met(state))
+        else:              # du_completions only
+            self.multiworld.completion_condition[self.player] = du_goal_met
 
     def generate_early(self):
         # Pick a random starting DU character
@@ -126,36 +144,16 @@ class B3World(World):
         self.starting_character = starting_char
 
 
-        # Saga unlocks
-        saga_items = {
-            0: None,  # Saiyan saga is always open (no item needed)
-            1: "Frieza Saga Unlock",
-            2: "Cell Saga Unlock",
-            3: "Buu Saga Unlock",
-        }
-        if int(self.options.saga_lockout.value):
-            # Lock sagas: precollect ONLY the starting saga; the rest go in pool.
-            start = int(self.options.starting_saga.value)
-            start_item = saga_items.get(start)
-            if start_item:
-                self.multiworld.push_precollected(create_item(self, start_item))
-            self._sagas_in_pool = [v for k, v in saga_items.items()
-                                   if v and k != start]
-        else:
-            # No lockout: all sagas open from the start (precollected).
-            for v in saga_items.values():
-                if v:
-                    self.multiworld.push_precollected(create_item(self, v))
-            self._sagas_in_pool = []
-
     def fill_slot_data(self) -> Mapping[str, Any]:
         return {
+            "goal":               self.options.goal.value,
+            "dark_star_balls_required": self.options.dark_star_balls_required.value,
+            "dark_star_balls_total":    self.options.dark_star_balls_total.value,
             "randomize_fights":   self.options.randomize_fights.value,
             "randomize_player1":  self.options.randomize_player1.value,
             "randomize_player2":  self.options.randomize_player2.value,
             "randomize_stages":   self.options.randomize_stages.value,
             "randomize_transformations": self.options.randomize_transformations.value,
-            "starting_saga":      self.options.starting_saga.value,
             "shop_slots":         self.options.shop_slots.value,
             "drain_trap":         self.options.drain_trap.value,
             "required_du_completions": self.options.required_du_completions.value,

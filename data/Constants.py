@@ -799,7 +799,9 @@ TRANSFORMATIONS = {
     "Dabura":     (0x25, {1: "Demonic Will"}),
     "Cooler":     (0x26, {1: "Final Form", 2: "Metal Cooler"}),
     "Broly":      (0x28, {1: "Legendary Super Saiyan"}),
-    "Saibaman":   (0x2A, {1: "Self-Destructing"}),
+    # Saibaman removed: its only "transformation" was a self-destruct
+    # (1: "Self-Destructing"), which would make a randomized fighter blow itself
+    # up. Excluded so the transformation randomizer never applies it.
 }
 
 # Fusion / special fighters (char ID + form field). These are distinct fighters.

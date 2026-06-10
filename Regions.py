@@ -96,11 +96,6 @@ DU_CHARACTER_SAGAS = {
     },
 }
 
-SAGA_UNLOCK_ITEMS = {
-    "Frieza": "Frieza Saga Unlock",
-    "Cell":   "Cell Saga Unlock",
-    "Buu":    "Buu Saga Unlock",
-}
 
 CHARACTER_UNLOCK_ITEMS = {
     "Goku":        "Goku DU",
@@ -203,9 +198,18 @@ def create_regions(world):
         menu.connect(db_region)
 
     # DU completion region - client sends these when the DU credits screen is reached.
+    # Each "Complete <Char> DU" requires owning that character's DU unlock item
+    # (otherwise the player can't play, let alone complete, that DU). Without
+    # this rule every completion is reachable from start -> goal is trivially met
+    # at sphere 0 -> empty playthrough.
     du_complete_region = Region("DU Completions", player, multiworld)
     for name, loc_id in DU_COMPLETION_LOCATIONS.items():
         loc = B3Location(player, name, loc_id, du_complete_region)
+        # "Complete Goku DU" -> "Goku DU", "Complete Kid Gohan DU" -> "Kid Gohan DU"
+        char = name[len("Complete "):]  # e.g. "Kid Gohan DU"
+        unlock_item = char if char in CHARACTER_UNLOCK_ITEMS.values() else None
+        if unlock_item:
+            loc.access_rule = (lambda inm: (lambda state: state.has(inm, player)))(unlock_item)
         du_complete_region.locations.append(loc)
     multiworld.regions.append(du_complete_region)
     menu.connect(du_complete_region)
@@ -226,12 +230,9 @@ def create_regions(world):
 
             multiworld.regions.append(region)
 
-            # Connect from menu with access rules
+            # Connect from menu. Sagas are always open (saga lockout removed);
+            # a DU saga-region only requires owning that character's DU unlock.
             entrance = menu.connect(region)
-            entrance.access_rule = (lambda cn, sn: lambda state: (
-                (cn is None or state.has(cn, player)) and
-                (sn == "Saiyan" or
-                 (sn == "Frieza" and state.has("Frieza Saga Unlock", player)) or
-                 (sn == "Cell"   and state.has("Cell Saga Unlock", player)) or
-                 (sn == "Buu"    and state.has("Buu Saga Unlock", player)))
-            ))(char_unlock, saga_name)
+            entrance.access_rule = (lambda cn: lambda state: (
+                cn is None or state.has(cn, player)
+            ))(char_unlock)
