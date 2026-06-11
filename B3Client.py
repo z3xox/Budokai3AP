@@ -97,6 +97,7 @@ class B3Context(CommonContext):
         self.shop_purchased: set = set()   # pool indices already bought (by position)
         self.shop_checks_sent: set = set() # location names already sent
         self._shop_was_open: bool = False
+        self._shop_zeni_high = None        # running max Zenie this shop visit (purchase gate)
 
         # Received items state
         self._received_zenie: int = 0
@@ -561,6 +562,7 @@ class B3Context(CommonContext):
             self._shop_was_open = False
             self._last_written_slot0 = None
             self._shop_qty_baseline = None
+            self._shop_zeni_high = None
             return
 
         # Confirm the REAL shop is loaded by locating its anchor. If not found,
@@ -579,6 +581,19 @@ class B3Context(CommonContext):
                         f"restocks={self.restocks_received}")
             self._last_written_slot0 = None
             visible = self._visible_shop_entries()
+            # Capture the qty baseline RIGHT NOW, before any purchase detection,
+            # snapshotting whatever the current capsule inventory is. This
+            # absorbs any bulk writes from edit-capsule menus or a save that
+            # happened while we were off the shop screen, so re-entering the
+            # shop never mistakes an already-populated inventory for purchases.
+            self._visible_pool_indices = [i for i, _e in visible]
+            base_snapshot = {}
+            for i in self._visible_pool_indices:
+                disp_idx, own_idx, _ = self.shop_pool[i]
+                base_snapshot[i] = self.iface.read_capsule_owned(own_idx, disp_idx)
+            self._shop_qty_baseline = base_snapshot
+            _z = self.iface.read_zenie_rt()
+            self._shop_zeni_high = _z if _z >= 0 else None
             if visible:
                 self._refresh_shop()
                 self._last_written_slot0 = visible[0][1][0]
@@ -622,7 +637,25 @@ class B3Context(CommonContext):
                 baseline[i] = self.iface.read_capsule_owned(own_idx, disp_idx)
             self._shop_qty_baseline = baseline
 
-        purchase_made = False
+        # Positive purchase evidence: a real shop purchase DEDUCTS Zenie.
+        # Saving and editing/equipping capsules do NOT. But Zenie can also
+        # INCREASE mid-shop (the player spawns money, or receives a Zenie AP
+        # item while the shop is open), so a fixed entry snapshot is wrong. We
+        # instead track the running MAXIMUM Zenie seen during this visit and
+        # treat a value BELOW that peak as spending. Increases just raise the
+        # peak; a drop below it is a real purchase.
+        zeni_now = self.iface.read_zenie_rt()
+        zeni_high = getattr(self, "_shop_zeni_high", None)
+        if zeni_now >= 0:
+            if zeni_high is None or zeni_now > zeni_high:
+                zeni_high = zeni_now
+                self._shop_zeni_high = zeni_high
+        zeni_spent = (
+            zeni_high is not None and zeni_now >= 0 and zeni_now < zeni_high
+        )
+
+        # Collect every visible slot whose owned-quantity rose above baseline.
+        increased = []
         for pool_idx in list(vis_indices):
             if pool_idx in self.shop_purchased:
                 continue
@@ -630,10 +663,37 @@ class B3Context(CommonContext):
             cur = self.iface.read_capsule_owned(own_idx, disp_idx)
             base = baseline.get(pool_idx, 0)
             if cur > base:
+                increased.append((pool_idx, disp_idx, own_idx, name, base, cur))
+
+        purchase_made = False
+        # Non-purchase bulk write if NO Zenie was spent (current not below the
+        # visit peak), OR more than one slot changed, OR a slot jumped by >1.
+        bulk_write = (
+            not zeni_spent or
+            len(increased) > 1 or
+            any((cur - base) > 1 for _, _, _, _, base, cur in increased)
+        )
+        if increased and bulk_write:
+            for pool_idx, _disp, _own, _name, _base, cur in increased:
+                baseline[pool_idx] = cur
+            self._shop_qty_baseline = baseline
+            logger.info(f"[B3] Ignored capsule-inventory change "
+                        f"({len(increased)} slot(s), zeni_spent={zeni_spent}, "
+                        f"zeni_high={zeni_high}, zeni_now={zeni_now}) "
+                        f"— not a purchase.")
+        else:
+            for pool_idx, disp_idx, own_idx, name, base, cur in increased:
                 logger.info(f"[B3] Shop purchase detected: {name} "
-                            f"(disp={disp_idx}, {base}->{cur})")
+                            f"(disp={disp_idx}, {base}->{cur}, "
+                            f"zeni {zeni_high}->{zeni_now})")
                 self.iface.clear_capsule_owned(own_idx, disp_idx)
                 self.shop_purchased.add(pool_idx)
+                baseline[pool_idx] = 0
+                # Reset the peak to the current Zenie so the NEXT purchase needs
+                # a fresh drop (otherwise every poll after one buy looks spent).
+                if zeni_now >= 0:
+                    self._shop_zeni_high = zeni_now
+                    zeni_high = zeni_now
                 purchase_made = True
                 loc_name = f"Shop: {name}"
                 if loc_name not in self.shop_checks_sent:

@@ -1075,6 +1075,24 @@ class B3Interface:
             val = 0x01 if char_name in unlocked else 0x00
             self.pine.write8(ADDR_LOCK_TABLE + i, val)
 
+    def read_zenie_rt(self) -> int:
+        """Read the real-time Zenie counter. A genuine shop purchase deducts
+        from this; saving or editing capsules does NOT. Used to gate shop-check
+        detection so bulk inventory writes (save/edit-capsule) can't be mistaken
+        for purchases. Returns -1 on failure.
+
+        Reads the LIVE module attribute (patched by _load_version_addrs) so the
+        version-specific address is always used (NTSC-U 0x00543D28 vs BL
+        0x0058F718)."""
+        try:
+            import sys
+            addr = getattr(sys.modules[__name__], "ADDR_ZENIE_RT", None)
+            if addr is None:
+                return -1
+            return self.pine.read32(addr)
+        except Exception:
+            return -1
+
     def write_zenie(self, amount: int):
         """Add Zenie to all distinct counters so every context (shop, DU, saved)
         reflects it. Addresses are de-duplicated so versions where two counters
