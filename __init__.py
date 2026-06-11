@@ -77,7 +77,10 @@ class B3World(World):
             for _ in range(rank_up_count):
                 pool.append(create_item(self, "Dragon Arena Rank Up"))
 
-        # Add each skill capsule exactly ONCE (unique rewards, not repeated).
+        # Add each skill capsule once (guaranteed). A SECOND copy of each is
+        # added to the filler pool below, so skills are less rare when there's
+        # room, but the extra copies yield to space in tight configs (no
+        # overflow). Skills are filler-classified (a 2nd copy just re-grants).
         skill_names = [n for n in CAPSULE_ITEMS.keys() if n.startswith("Skill: ")]
         for name in skill_names:
             pool.append(create_item(self, name))
@@ -98,12 +101,36 @@ class B3World(World):
 
         zenie_names = [n for n in CAPSULE_ITEMS.keys() if n.startswith("Zenie")]
         trap_names  = list(TRAP_ITEMS.keys()) if self.options.drain_trap else []
-        filler_pool = zenie_names + trap_names
-        if not filler_pool:
-            filler_pool = zenie_names or ["Zenie x500"]
+        # Item capsules add flavorful variety instead of monotonous Zenie. Each
+        # capsule can appear at most once (they're unique unlocks), so draw them
+        # WITHOUT replacement; fall back to Zenie once they run out.
+        from .Items import ITEM_CAPSULE_ITEMS
+        capsule_names = list(ITEM_CAPSULE_ITEMS.keys())
+        self.random.shuffle(capsule_names)
+
+        # Second copy of each skill, as FILLER (so skills are less rare). These
+        # are consumed first from the filler budget, but only as space allows —
+        # in tight configs `needed` is small and they simply don't all fit, so
+        # there's no overflow. Shuffled so which skills get a 2nd copy varies.
+        extra_skill_copies = list(skill_names)
+        self.random.shuffle(extra_skill_copies)
+
+        filler_cycle = zenie_names + trap_names
+        if not filler_cycle:
+            filler_cycle = zenie_names or ["Zenie x500"]
 
         for i in range(needed):
-            name = filler_pool[i % len(filler_pool)]
+            if extra_skill_copies:
+                # Place a second skill copy first (skills less rare).
+                name = extra_skill_copies.pop()
+            elif capsule_names:
+                # ~70% capsule, ~30% Zenie/trap while capsules remain
+                if self.random.random() < 0.7:
+                    name = capsule_names.pop()
+                else:
+                    name = filler_cycle[i % len(filler_cycle)]
+            else:
+                name = filler_cycle[i % len(filler_cycle)]
             pool.append(create_item(self, name))
 
         self.multiworld.itempool.extend(pool)
@@ -153,6 +180,7 @@ class B3World(World):
             "randomize_player1":  self.options.randomize_player1.value,
             "randomize_player2":  self.options.randomize_player2.value,
             "randomize_stages":   self.options.randomize_stages.value,
+            "randomize_music":    self.options.randomize_music.value,
             "randomize_transformations": self.options.randomize_transformations.value,
             "shop_slots":         self.options.shop_slots.value,
             "drain_trap":         self.options.drain_trap.value,

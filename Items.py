@@ -59,6 +59,24 @@ MCGUFFIN_ITEMS = {
     DARK_STAR_BALL_ITEM: B3_BASE_ID + 0x310,
 }
 
+# ─── Item capsules (filler variety) ──────────────────────────────────────────
+# Equipment/consumable capsules granted exactly like skills (write 1 to DU-RT +
+# RT). Used to replace monotonous Zenie filler with flavorful capsule unlocks.
+# Named "Capsule: <name>" to distinguish from skills and shop locations.
+#
+# IMPORTANT: capsules used as SHOP CHECKS (SHOP_CAPSULE_POOL) are EXCLUDED. The
+# shop fires its check by detecting a capsule's ownership flag increasing, so
+# granting one of those capsules as an AP item would falsely trigger the shop
+# check. Excluding them removes that conflict entirely.
+from .data.Constants import ITEM_CAPSULES as _ITEM_CAPSULES
+from .data.Constants import SHOP_CAPSULE_POOL as _SHOP_CAPSULE_POOL
+_SHOP_CAPSULE_NAMES = {entry[2] for entry in _SHOP_CAPSULE_POOL}
+ITEM_CAPSULE_ITEMS = {
+    f"Capsule: {name}": B3_BASE_ID + 0x400 + i
+    for i, name in enumerate(_ITEM_CAPSULES.keys())
+    if name not in _SHOP_CAPSULE_NAMES
+}
+
 # ─── Full item table ──────────────────────────────────────────────────────────
 
 item_table = {}
@@ -67,6 +85,7 @@ item_table.update(CAPSULE_ITEMS)
 item_table.update(TRAP_ITEMS)
 item_table.update(SPECIAL_ITEMS)
 item_table.update(MCGUFFIN_ITEMS)
+item_table.update(ITEM_CAPSULE_ITEMS)
 
 def get_item_classification(name: str) -> ItemClassification:
     if name in CHARACTER_ITEMS:
@@ -77,6 +96,8 @@ def get_item_classification(name: str) -> ItemClassification:
         return ItemClassification.progression
     if name in MCGUFFIN_ITEMS:
         return ItemClassification.progression
+    if name in ITEM_CAPSULE_ITEMS:
+        return ItemClassification.filler
     if name in SPECIAL_ITEMS:
         return ItemClassification.useful
     if name in TRAP_ITEMS:

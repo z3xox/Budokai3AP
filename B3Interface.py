@@ -18,7 +18,7 @@ from .data.Constants import (
     ADDR_ZENIE_DU, ADDR_ZENIE_SAVED,
     ADDR_P1_CHAR, ADDR_P1_CHAR_T4, ADDR_P1_CAPS,
     ADDR_P2_CHAR, ADDR_P2_CHAR_T4, ADDR_P2_CAPS,
-    ADDR_STAGE_SELECT, ADDR_BATTLE_MOD,
+    ADDR_STAGE_SELECT, ADDR_BATTLE_MOD, ADDR_MUSIC,
     ADDR_SHOP_STRUCT_BASE, SHOP_STRUCT_SIZE, SHOP_DISPLAY_BASE,
     SHOP_OWNERSHIP_BASE, SHOP_PRICE, SHOP_MAX_SLOTS, ADDR_SHOP_COUNT,
     SHOP_SIG0, SHOP_SIG1, SHOP_OFF_COUNT_FROM_SIG, SHOP_OFF_ITEMS_FROM_SIG,
@@ -26,7 +26,7 @@ from .data.Constants import (
     SHOP_SCAN_START, SHOP_SCAN_END,
     SHOP_OFF_DISPLAY, SHOP_OFF_RECEIVED, SHOP_OFF_PRICE, SHOP_OFF_FLAGS,
     SHOP_CAPSULE_POOL,
-    SKILL_CAPSULES,
+    SKILL_CAPSULES, ITEM_CAPSULES,
     RT_CAPS_BASE, DU_RT_CAPS_BASE,
     NTSC_RT_CAPS_BASE, NTSC_DU_RT_CAPS_BASE,
     SHOP_PURCHASE_BASE, SHOP_PURCHASE_BY_DISPLAY,
@@ -158,6 +158,7 @@ def _ori(rt,rs,imm):   return 0x34000000|(R[rs]<<21)|(R[rt]<<16)|u16(imm)
 def _lbu(rt,off,base): return 0x90000000|(R[base]<<21)|(R[rt]<<16)|u16(off)
 def _lw(rt,off,base):  return 0x8C000000|(R[base]<<21)|(R[rt]<<16)|u16(off)
 def _sw(rt,off,base):  return 0xAC000000|(R[base]<<21)|(R[rt]<<16)|u16(off)
+def _sb(rt,off,base):  return 0xA0000000|(R[base]<<21)|(R[rt]<<16)|u16(off)
 def _lh(rt,off,base):  return 0x84000000|(R[base]<<21)|(R[rt]<<16)|u16(off)
 def _bne(rs,rt,off):   return 0x14000000|(R[rs]<<21)|(R[rt]<<16)|u16(off)
 def _beq(rs,rt,off):   return 0x10000000|(R[rs]<<21)|(R[rt]<<16)|u16(off)
@@ -201,6 +202,12 @@ class Asm:
         self.load_addr("t0", addr)
         self.load_imm("t1", value)
         self.emit(_sw("t1", 0, "t0"))
+
+    def write_byte(self, addr, value):
+        """Write a single byte (e.g. music track) to an absolute address."""
+        self.load_addr("t0", addr)
+        self.load_imm("t1", value & 0xFF)
+        self.emit(_sb("t1", 0, "t0"))
 
     def finalize(self) -> bytes:
         for idx, op, rs, rt, label in self.branches:
@@ -300,7 +307,8 @@ def build_cave2() -> bytes:
     return code
 
 
-def build_cave(matchups: dict, randomize_stages: bool = True) -> bytes:
+def build_cave(matchups: dict, randomize_stages: bool = True,
+               music_in_cave: bool = False) -> bytes:
     for key, data in matchups.items():
         assert "p1" in data and "p2" in data, f"Missing p1/p2 in {key}"
         assert "char" in data["p1"] and "bt" in data["p1"], f"Missing char/bt in p1 for {key}"
@@ -398,6 +406,12 @@ def build_cave(matchups: dict, randomize_stages: bool = True) -> bytes:
         if randomize_stages:
             a.write_word(ADDR_STAGE_SELECT, data["stage_id"])
 
+        # Music (NTSC-U only: the cave1 intercept timing works here, same as the
+        # stage write. On BL the cave fires too early/gets overwritten, so music
+        # is written via polling in the client instead — see _service_music).
+        if music_in_cave and data.get("music") is not None:
+            a.write_byte(ADDR_MUSIC, data["music"])
+
         # Drain trap
         if data.get("drain"):
             a.write_word(ADDR_BATTLE_MOD, 0x00020003)
@@ -472,6 +486,7 @@ class B3Interface:
                 return False
             self._game_id = gid or ver.get("game_id", GAME_ID)
             self._version = ver
+            self._crc = crc.lower()
             self._load_version_addrs(ver)
             self.logger.info(f"[B3] Connected - DBZ Budokai 3 ({crc.upper()})")
             return True
@@ -491,6 +506,7 @@ class B3Interface:
             "addr_p2_char_t4":      "ADDR_P2_CHAR_T4",
             "addr_p2_caps":         "ADDR_P2_CAPS",
             "addr_stage_select":    "ADDR_STAGE_SELECT",
+            "addr_music":           "ADDR_MUSIC",
             "addr_battle_mod":      "ADDR_BATTLE_MOD",
             "addr_screen":          "ADDR_SCREEN",
             "addr_mode":            "ADDR_MODE",
@@ -542,9 +558,17 @@ class B3Interface:
         self.pine.disconnect()
         self._game_id = None
         self._cave_installed = False
+        self._crc = ""
 
     def is_connected(self) -> bool:
         return self.pine.is_connected() and self._game_id is not None
+
+    def music_cave_supported(self) -> bool:
+        """NTSC-U (CRC c97ef0a4) writes battle music inside the cave1 intercept
+        (works there). On BL (CRC 2a4b60eb) the intercept fires too early / gets
+        overwritten, so music must be written via polling instead. Detection is
+        by CRC, since both versions can report the same game_id string."""
+        return getattr(self, "_crc", "") == "c97ef0a4"
 
     # ── Cave management ───────────────────────────────────────────────────────
 
@@ -616,6 +640,13 @@ class B3Interface:
     def in_du(self) -> bool:
         return self.get_mode() == 0x01
 
+    def write_music(self, track: int):
+        """Write the battle music track byte (BL polling path)."""
+        try:
+            self.pine.write8(ADDR_MUSIC, track & 0xFF)
+        except Exception:
+            pass
+
     def any_fight_loading(self) -> bool:
         """Returns True if a fight is loading or in progress.
         Uses screen ID — only safe to install cave on world map (0x0108)."""
@@ -642,6 +673,30 @@ class B3Interface:
         return self.pine.read8(base + OFFSET_BATTLE_COMP)
 
     # ── Fight detection ───────────────────────────────────────────────────────
+
+    def current_fight_key(self):
+        """Best-effort (char, saga, battle) key for the fight currently
+        loading/active, using the same tracking poll_completed_fights maintains.
+        Returns None if not resolvable. Used by the BL music-write path."""
+        if not self.in_du():
+            return None
+        active_char_id = self.get_du_char()
+        active_char = None
+        for char_name, info in DU_BASES.items():
+            if info["du_id"] == active_char_id:
+                active_char = char_name
+                break
+        if not active_char:
+            return None
+        bs = self.get_battle_state(active_char)
+        battle_low = bs & 0xFF
+        saga_id = self.get_saga(active_char)
+        if battle_low in (0xFF, 0x00):
+            # fall back to last-tracked battle (set while in battle screens)
+            return (getattr(self, "_last_char", active_char),
+                    getattr(self, "_last_saga", 0),
+                    getattr(self, "_last_battle", 0))
+        return (active_char, saga_id, battle_low)
 
     def poll_completed_fights(self) -> list:
         """
@@ -772,6 +827,19 @@ class B3Interface:
         """Grant a skill capsule by writing 1 to its DU-RT and RT addresses.
         SKILL_CAPSULES holds NTSC-U addresses; translate to the active version."""
         entry = SKILL_CAPSULES.get(skill_name)
+        if not entry:
+            return
+        du_rt, rt = entry
+        du_rt_shift = DU_RT_CAPS_BASE - NTSC_DU_RT_CAPS_BASE
+        rt_shift    = RT_CAPS_BASE - NTSC_RT_CAPS_BASE
+        self.pine.write8(du_rt + du_rt_shift, 0x01)
+        self.pine.write8(rt + rt_shift, 0x01)
+
+    def grant_item_capsule(self, capsule_name: str):
+        """Grant an equipment/consumable capsule. Same mechanism as grant_skill
+        (write 1 to DU-RT + RT); ITEM_CAPSULES holds NTSC-U (du_rt, rt) addrs,
+        translated to the active version via the same base shifts."""
+        entry = ITEM_CAPSULES.get(capsule_name)
         if not entry:
             return
         du_rt, rt = entry

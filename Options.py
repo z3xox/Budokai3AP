@@ -29,6 +29,13 @@ class RandomizeStages(Toggle):
     default = 1
 
 
+class RandomizeMusic(Toggle):
+    """Randomize the battle music track in Dragon Universe fights. Each matchup
+    gets a random track (0-22). Cosmetic only — no effect on logic or checks."""
+    display_name = "Randomize Music"
+    default = 0
+
+
 class RandomizeTransformations(Toggle):
     """Give randomized fighters a random starting transformation/form each fight
     (e.g. spawn as SSJ, Perfect Cell, a fusion). Applies to whichever sides are
@@ -125,6 +132,7 @@ class B3Options(PerGameCommonOptions):
     randomize_player1: RandomizePlayer1
     randomize_player2: RandomizePlayer2
     randomize_stages: RandomizeStages
+    randomize_music: RandomizeMusic
     randomize_transformations: RandomizeTransformations
     shop_slots: ShopSlots
     drain_trap: DrainTrap

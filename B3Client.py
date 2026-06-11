@@ -75,6 +75,7 @@ class B3Context(CommonContext):
         self._prev_screen_for_locks: int = -1
 
         self.granted_skills: set = set()  # skills received from AP
+        self.granted_capsules: set = set()  # item capsules received from AP
 
         # Dragon Arena state
         self.da_ticket: bool = False         # has Dragon Arena Ticket
@@ -105,13 +106,58 @@ class B3Context(CommonContext):
         self.completed_dus: set = set()
         self._prev_screen_du_complete: int = -1
         self._goal_sent: bool = False
+        self._music_armed: bool = True
+        self._randomize_music: bool = False
         self._dark_star_balls_received: int = 0
+        self._goal_label = None              # GUI goal-progress label
 
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
             await super().server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
+
+    def make_gui(self):
+        ui = super().make_gui()
+        ui.base_title = "Dragon Ball Z Budokai 3 Archipelago Client"
+        return ui
+
+    def draw_goal_counter(self):
+        """Add/update a small goal-progress label in the client's top connect
+        bar (mirrors the Melee/BT2 pattern). Shows progress toward the active
+        goal: Dark Star Dragon Balls, DU completions, or both. Best-effort."""
+        try:
+            if not getattr(self, "ui", None):
+                return
+            try:
+                from kvui import MDLabel as Label
+            except ImportError:
+                from kvui import Label
+
+            if getattr(self, "_goal_label", None) is None:
+                self._goal_label = Label(text="", size_hint_x=None,
+                                         width=220, halign="center")
+                self.ui.connect_layout.add_widget(self._goal_label)
+
+            sd = self.slot_data or {}
+            if not sd:
+                self._goal_label.text = ""
+                return
+            goal = int(sd.get("goal", 0))
+            balls_have = self._dark_star_balls_received
+            balls_need = int(sd.get("dark_star_balls_required", 7))
+            du_have = len(self.completed_dus)
+            du_need = max(1, min(int(sd.get("required_du_completions", 1)), 11))
+
+            if goal == 1:        # dark_star_dragon_balls
+                self._goal_label.text = f"Dark Star Balls: {balls_have}/{balls_need}"
+            elif goal == 2:      # both
+                self._goal_label.text = (
+                    f"Balls {balls_have}/{balls_need}  DU {du_have}/{du_need}")
+            else:                # du_completions
+                self._goal_label.text = f"DU Completions: {du_have}/{du_need}"
+        except Exception:
+            pass
 
     def on_package(self, cmd: str, args: dict):
         super().on_package(cmd, args)
@@ -194,6 +240,12 @@ class B3Context(CommonContext):
             self.iface.grant_skill(skill_name)
             logger.info(f"[B3] Skill granted: {skill_name}")
 
+        elif name.startswith("Capsule: "):
+            capsule_name = name[len("Capsule: "):]
+            self.granted_capsules.add(capsule_name)
+            self.iface.grant_item_capsule(capsule_name)
+            logger.info(f"[B3] Capsule granted: {capsule_name}")
+
         elif name == "Dragon Arena Ticket":
             self.da_ticket = True
             self.iface.unlock_dragon_arena()
@@ -225,6 +277,8 @@ class B3Context(CommonContext):
         stage_ids = list(STAGES.values())
         drain_trap = bool(self.slot_data.get("drain_trap", 0)) if self.slot_data else False
         randomize_stages = bool(self.slot_data.get("randomize_stages", 1)) if self.slot_data else True
+        randomize_music = bool(self.slot_data.get("randomize_music", 0)) if self.slot_data else False
+        from .data.Constants import MUSIC_TRACKS
 
         master = bool(self.slot_data.get("randomize_fights", 1)) if self.slot_data else True
         rand_p1 = bool(self.slot_data.get("randomize_player1", 0)) if self.slot_data else False
@@ -257,6 +311,7 @@ class B3Context(CommonContext):
             p1_char, p1_bt = ROSTER[p1_name]
             p2_char, p2_bt = ROSTER[p2_name]
             stage_id = rng.choice(stage_ids) if randomize_stages else 0x05
+            music = rng.choice(MUSIC_TRACKS) if randomize_music else None
 
             p1_form = pick_form(p1_name) if rand_p1 else 0
             p2_form = pick_form(p2_name) if rand_p2 else 0
@@ -269,15 +324,17 @@ class B3Context(CommonContext):
                 "p1": {"char": p1_char, "bt": p1_bt, "name": p1_name, "form": p1_form},
                 "p2": {"char": p2_char, "bt": p2_bt, "name": p2_name, "form": p2_form},
                 "stage_id": stage_id,
+                "music": music,
                 "drain": drain,
                 "write_p1": rand_p1,
                 "write_p2": rand_p2,
             }
 
-        # If nothing is randomized (no P1, no P2, no stages, no drain), skip cave entirely
-        self._cave_needed = rand_p1 or rand_p2 or randomize_stages or drain_trap
+        # If nothing is randomized (no P1, no P2, no stages, no drain, no music), skip cave entirely
+        self._cave_needed = rand_p1 or rand_p2 or randomize_stages or drain_trap or randomize_music
+        self._randomize_music = randomize_music
         logger.info(f"[B3] Built {len(self.matchups)} matchups "
-                    f"(P1={rand_p1}, P2={rand_p2}, stages={randomize_stages})")
+                    f"(P1={rand_p1}, P2={rand_p2}, stages={randomize_stages}, music={randomize_music})")
 
     def install_cave(self):
         """Build and install the MIPS code cave."""
@@ -288,9 +345,67 @@ class B3Context(CommonContext):
             logger.info("[B3] No randomization enabled — skipping fight cave.")
             return
         randomize_stages = bool(self.slot_data.get("randomize_stages", 1)) if self.slot_data else True
-        cave_code = build_cave(self.matchups, randomize_stages=randomize_stages)
+        # NTSC-U bakes the music write into the cave; BL writes it via polling.
+        music_in_cave = (getattr(self, "_randomize_music", False)
+                         and self.iface.music_cave_supported())
+        cave_code = build_cave(self.matchups, randomize_stages=randomize_stages,
+                               music_in_cave=music_in_cave)
         self.iface.install_cave(cave_code)
         self.cave_installed = self.iface.cave_installed()
+
+    def _service_music(self):
+        """BL music-write path. On NTSC-U the music is baked into the cave, so
+        this is a no-op there. On BL the cave1 intercept fires too early for
+        music; instead we write the upcoming fight's track the moment the battle
+        becomes active.
+
+        Timing matters: the battle music is loaded DURING the load, before the
+        DU-battle screen settles. Writing on screen==0x0109 is too late (it ends
+        up changing the NEXT/post-fight track). The reliable trigger — the same
+        one the battle detector uses — is the battle field at base+OFFSET_BATTLE
+        transitioning from idle (0xFF) to a real battle id (non-0xFF / non-0x00).
+        We write once on that transition and re-arm when it returns to idle.
+        """
+        if not getattr(self, "_randomize_music", False):
+            return
+        if self.iface.music_cave_supported():
+            return  # NTSC-U: handled in the cave
+        if not self.iface.in_du():
+            self._music_armed = True
+            return
+
+        active = self.iface.get_active_du_char_name()
+        if not active:
+            return
+        battle = self.iface.get_battle_state(active) & 0xFF
+        idle = battle in (0xFF, 0x00)
+
+        if idle:
+            # Between fights: re-arm so the next fight gets its music written.
+            self._music_armed = True
+            return
+
+        # Battle field is active. Write on the transition, then re-assert for a
+        # short window to cover the race where the game loads its own track just
+        # after the field flips (a single early write can otherwise be clobbered).
+        if getattr(self, "_music_armed", True):
+            saga = self.iface.get_saga(active)
+            key = (active, saga, battle)
+            mu = self.matchups.get(key)
+            track = mu.get("music") if mu else None
+            if track is not None:
+                self.iface.write_music(track)
+                self._music_track_pending = track
+                self._music_reassert = 5   # re-write on the next few polls too
+                logger.info(f"[B3] Music track {track} written for {key}")
+            else:
+                self._music_track_pending = None
+                self._music_reassert = 0
+            self._music_armed = False
+        elif getattr(self, "_music_reassert", 0) > 0 and \
+                getattr(self, "_music_track_pending", None) is not None:
+            self.iface.write_music(self._music_track_pending)
+            self._music_reassert -= 1
 
     # ── Shop ─────────────────────────────────────────────────────────────────
 
@@ -701,6 +816,9 @@ async def pcsx2_sync_task(ctx: B3Context):
             # Process received items from server
             ctx._process_received_items()
 
+            # Update the GUI goal-progress label (best-effort).
+            ctx.draw_goal_counter()
+
             screen = ctx.iface.get_screen()
 
             # DU Credits completion checks / YAML goal count
@@ -729,6 +847,9 @@ async def pcsx2_sync_task(ctx: B3Context):
             for loc_name in completed:
                 await ctx._send_check(loc_name)
 
+            # BL music-write path (no-op on NTSC-U / when music randomization off)
+            ctx._service_music()
+
             # Reapply character locks periodically (in case game resets them on load)
             if not hasattr(ctx, '_lock_reapply_counter'):
                 ctx._lock_reapply_counter = 0
@@ -740,6 +861,9 @@ async def pcsx2_sync_task(ctx: B3Context):
                 scr = ctx.iface.get_screen()
                 if scr in (0x0108, 0x0016):
                     ctx.iface.apply_skill_locks(ctx.granted_skills)
+                    # Re-assert received item capsules (load can reset RT flags)
+                    for cap in ctx.granted_capsules:
+                        ctx.iface.grant_item_capsule(cap)
                     # Maintain Dragon Arena ticket lock state
                     if ctx.da_fights_total > 0:
                         if ctx.da_ticket:
