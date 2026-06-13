@@ -164,9 +164,18 @@ class B3World(World):
             self.multiworld.completion_condition[self.player] = du_goal_met
 
     def generate_early(self):
-        # Pick a random starting DU character
-        all_du_chars = list(CHARACTER_UNLOCK_ITEMS.values())
-        starting_char = self.random.choice(all_du_chars)
+        # Determine the starting DU character. The YAML option lets the player
+        # pick a specific one, or use 'random' (the default) to have one chosen
+        # per seed. AP resolves 'random' to one of the real option values
+        # (0-10) before we read it, so the value directly indexes the DU list.
+        # The chosen character is precollected and removed from the item pool
+        # (see create_items).
+        all_du_chars = list(CHARACTER_UNLOCK_ITEMS.values())  # ["Goku DU", ...]
+        idx = int(self.options.starting_character.value)
+        if 0 <= idx < len(all_du_chars):
+            starting_char = all_du_chars[idx]
+        else:
+            starting_char = self.random.choice(all_du_chars)
         self.multiworld.push_precollected(create_item(self, starting_char))
         self.starting_character = starting_char
 

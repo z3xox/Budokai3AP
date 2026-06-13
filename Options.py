@@ -123,9 +123,30 @@ class Dragonsanity(Toggle):
     default = 1
 
 
+class StartingCharacter(Choice):
+    """Which Dragon Universe character you start with already unlocked. That
+    character's DU unlock is precollected and removed from the item pool (since
+    you begin with it). Use 'random' (the default) to have a random one picked
+    for you per seed."""
+    display_name = "Starting DU Character"
+    option_goku = 0
+    option_kid_gohan = 1
+    option_teen_gohan = 2
+    option_adult_gohan = 3
+    option_vegeta = 4
+    option_krillin = 5
+    option_piccolo = 6
+    option_tien = 7
+    option_yamcha = 8
+    option_uub = 9
+    option_broly = 10
+    default = "random"
+
+
 @dataclass
 class B3Options(PerGameCommonOptions):
     goal: Goal
+    starting_character: StartingCharacter
     dark_star_balls_required: DarkStarBallsRequired
     dark_star_balls_total: DarkStarBallsTotal
     randomize_fights: RandomizeFights
