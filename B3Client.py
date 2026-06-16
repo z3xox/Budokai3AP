@@ -12,6 +12,7 @@ import random
 from typing import Optional
 
 import Utils
+from Utils import async_start
 from CommonClient import (
     CommonContext, get_base_parser, server_loop,
     gui_enabled, logger, ClientCommandProcessor,
@@ -90,6 +91,20 @@ class B3Context(CommonContext):
         self.db_checks_sent: set = set()     # "char#bit" already sent
         self.wish_checks_sent: set = set()   # char already wished
 
+        # DeathLink state
+        self.death_link: bool = False
+        self._dl_pending_death: bool = False  # incoming death buffered to apply
+        self._dl_caused: bool = False         # our loss was caused by incoming DL
+        self._dl_killing: bool = False        # actively draining HP to kill self
+        self._dl_fight_live: bool = False     # saw a live DU battle this fight
+        self._dl_prev_end_hp: int = -1        # last fight_end_hp reading
+        self._dl_loss_sent: bool = False      # already sent this fight's loss
+        self._dl_win_lock: bool = False       # results-win seen -> no death this fight
+        # Arena-specific deathlink state (arena loss = return to list w/o results)
+        self._dl_arena_live: bool = False     # saw arena battle (0x0619) this fight
+        self._dl_arena_win: bool = False      # saw arena results (0x061A/B) this fight
+        self._dl_prev_screen: int = -1        # last screen for transition detection
+
         # Shop state
         # The pool of capsules (from slot_data seed) — up to 50, shown 10 at a time
         self.shop_pool: list = []          # list of (display_idx, own_idx, name)
@@ -167,6 +182,140 @@ class B3Context(CommonContext):
             logger.info(f"[B3] Slot data: {self.slot_data}")
             asyncio.create_task(self._on_connected())
 
+    def on_deathlink(self, data: dict):
+        """Incoming DeathLink: buffer a death to apply to the current/next DU
+        battle (the watcher applies it by draining HP)."""
+        super().on_deathlink(data)
+        self._dl_pending_death = True
+
+    def _handle_deathlink(self):
+        """Run every poll. Outgoing: detect our loss (fight-end HP cleared to 0
+        while we stayed in DU battle, i.e. NOT the win results screen) and send a
+        death. Incoming: drain HP persistently so the AI finishes us. Buffered
+        until we're in a TRULY-LIVE DU battle (HP initialized); anti-chain so a
+        death we were handed doesn't echo back out."""
+        if not self.death_link:
+            return
+        try:
+            screen = self.iface.get_screen()
+        except Exception:
+            return
+        in_battle = (screen == 0x0109)   # SCREEN_DU_BATTLE
+        on_win = (screen == 0x010A)      # SCREEN_RESULTS_WIN
+
+        # ── Arena outgoing detection ─────────────────────────────────────────
+        # Arena has clean, distinct screens (no in-place retry popup like DU):
+        #   0x0619 BATTLE -> WIN goes to 0x061A/0x061B (results/save), LOSS goes
+        #   straight back to 0x0618 (opponent list). So an arena loss is a real
+        #   screen transition we can catch: we were in an arena battle, then
+        #   returned to the list (or entrance) without ever hitting results.
+        arena_battle = (screen == 0x0619)        # SCREEN_DA_BATTLE
+        arena_results = screen in (0x061A, 0x061B)  # results / save (a WIN)
+        arena_list = screen in (0x0617, 0x0618)  # entrance / opponent list
+        prev_screen = self._dl_prev_screen
+        self._dl_prev_screen = screen
+
+        if arena_battle:
+            self._dl_arena_live = True
+        if arena_results:
+            self._dl_arena_win = True
+        # Arena fight just ENDED if we were in arena battle last poll and now we
+        # are not (and not loading into results). Decide win vs loss:
+        if self._dl_arena_live and not arena_battle and (arena_list or arena_results):
+            if arena_results or self._dl_arena_win:
+                pass  # arena WIN -> no death
+            elif not self._dl_loss_sent:
+                # arena LOSS -> back to list without results
+                self._dl_loss_sent = True
+                if self._dl_caused:
+                    self._dl_caused = False
+                else:
+                    async_start(self.send_death(
+                        f"{self.player_names.get(self.slot, 'Player')} lost in the Dragon Arena."))
+            # reset arena per-fight state once we are back on the list
+            if arena_list:
+                self._dl_arena_live = False
+                self._dl_arena_win = False
+                self._dl_loss_sent = False
+                self._dl_killing = False
+                self._dl_caused = False
+
+        # Read the fight-end HP marker. NOTE: the DU battle screen (0x0109) shows
+        # DURING THE LOAD, before the fight starts and before HP is initialized.
+        # At fight start HP loads to a real nonzero value (~max); during load it
+        # is 0; on death it clears to 0. So a fight is only TRULY LIVE when we're
+        # on the battle screen AND HP has initialized (end_hp != 0). This avoids
+        # draining/killing during the load window.
+        try:
+            end_hp = self.iface.fight_end_hp()
+        except Exception:
+            end_hp = -1
+        prev_end = self._dl_prev_end_hp
+        self._dl_prev_end_hp = end_hp
+
+        hp_initialized = (end_hp not in (0, -1))
+        truly_live = in_battle and hp_initialized
+
+        # NEW-ATTEMPT edge: end_hp goes 0 (dead/ended) -> nonzero (a fresh fight
+        # attempt has initialized). This fires on a Continue/Retry too, where the
+        # screen STAYS on 0x0109 and the leave-battle reset never happens. Without
+        # this, _dl_loss_sent/_dl_win_lock stay stale and a second genuine loss in
+        # the same fight would be wrongly suppressed.
+        new_attempt = (hp_initialized and prev_end in (0, -1))
+        if new_attempt:
+            self._dl_loss_sent = False
+            self._dl_win_lock = False
+            # Only clear the anti-chain flag if we're NOT mid-kill; a kill in
+            # progress keeps _dl_caused so its resulting loss is suppressed.
+            if not self._dl_killing:
+                self._dl_caused = False
+
+        # Per-fight tracking. "Live" requires HP initialized, not just the screen.
+        # Leaving the battle (and not on the win screen) resets for next fight.
+        if truly_live:
+            self._dl_fight_live = True
+        elif not on_win and not in_battle:
+            # back on map/menu/charsel -> reset for next fight
+            self._dl_fight_live = False
+            self._dl_loss_sent = False
+            self._dl_win_lock = False
+            self._dl_killing = False
+            self._dl_caused = False
+
+        # Win lockout: if we ever hit the win results screen this fight, no death
+        # may fire (mirrors BT2 victory-lock).
+        if on_win:
+            self._dl_win_lock = True
+
+        # OUTGOING: a fresh transition of end_hp -> 0 AFTER the fight went live
+        # (so the load-window 0 doesn't count), while we did NOT see the win
+        # screen = our loss. Send once. Anti-chain: a loss we caused via an
+        # incoming DeathLink doesn't echo back out.
+        fresh_end = (end_hp == 0 and prev_end not in (0, -1))
+        if (self._dl_fight_live and fresh_end and not self._dl_win_lock
+                and not self._dl_loss_sent):
+            self._dl_loss_sent = True
+            if self._dl_caused:
+                self._dl_caused = False           # suppress echo
+            else:
+                async_start(self.send_death(
+                    f"{self.player_names.get(self.slot, 'Player')} was defeated in battle."))
+
+        # INCOMING: apply a buffered death once the fight is TRULY LIVE. For DU
+        # that means the battle screen + HP initialized; for arena it means the
+        # arena battle screen (0x0619). Drain HP persistently (the AI finishes
+        # us). Tag the loss as caused so it won't echo.
+        incoming_live = truly_live or arena_battle
+        if self._dl_pending_death and incoming_live:
+            self._dl_killing = True
+            self._dl_pending_death = False
+            self._dl_caused = True
+        if self._dl_killing:
+            if (in_battle and end_hp != 0) or arena_battle:
+                self.iface.kill_player()          # pin HP low; AI finishes us
+            else:
+                self._dl_killing = False          # fight ended / left battle
+
     async def _on_connected(self):
         """Called when AP server connection is established."""
         # Set starting character from slot data
@@ -180,6 +329,12 @@ class B3Context(CommonContext):
         if self.slot_data and int(self.slot_data.get("arenasanity", 0)):
             self.da_fights_total = 380
         self.dragonsanity = bool(self.slot_data.get("dragonsanity", 0)) if self.slot_data else False
+
+        # DeathLink
+        self.death_link = bool(self.slot_data.get("death_link", 0)) if self.slot_data else False
+        if self.death_link:
+            async_start(self.update_death_link(True))
+            logger.info("[B3] DeathLink enabled.")
 
         if self.connected_to_game:
             logger.info("[B3] AP server connected — building matchups and installing cave...")
@@ -515,15 +670,32 @@ class B3Context(CommonContext):
 
         screen = self.iface.get_screen()
 
-        # Clamp the visible opponent count — ONLY on the stable list screen.
-        # (Removed 0x0617 entrance: clamping there raced the list teardown when
-        # starting the first fight and crashed PCSX2.)
-        if screen == 0x0618:  # SCREEN_DA_CHARSEL (list)
-            allowed = min((self.da_rank_ups + 1) * 10, self.da_fights_total)
-            # Always fresh lookup — never use cache on the list screen so we
-            # catch the struct immediately after returning from a fight.
-            self.iface._da_count_cache = None
-            self.iface.clamp_da_opponent_count(allowed)
+        # Clamp the visible opponent count — ONLY on the stable list screen, and
+        # only after it has been stable for a few polls. The arena list struct is
+        # torn down when a fight starts; for a frame or two the screen still reads
+        # 0x0618 while the struct is half-freed. A scan/write landing in that
+        # window crashes PCSX2. To avoid it we: (1) require the list screen to be
+        # stable for several consecutive polls (skip the just-entered / about-to-
+        # leave frames), (2) reuse the cached count address instead of forcing a
+        # fresh full scan every poll, and (3) read the current count first and
+        # only write when it actually exceeds the allowed value.
+        prev_da_screen = getattr(self, "_prev_da_screen", -1)
+        if screen == 0x0618:
+            if prev_da_screen != 0x0618:
+                # Just entered the list screen: invalidate cache ONCE so the next
+                # stable poll does a fresh lookup, and start the settle counter.
+                self.iface._da_count_cache = None
+                self._da_list_settle = 0
+            else:
+                self._da_list_settle = getattr(self, "_da_list_settle", 0) + 1
+            # Only touch memory once the list has clearly settled (not the entry
+            # frame, not the teardown frame).
+            if getattr(self, "_da_list_settle", 0) >= 3:
+                allowed = min((self.da_rank_ups + 1) * 10, self.da_fights_total)
+                self.iface.clamp_da_opponent_count(allowed)
+        else:
+            self._da_list_settle = 0
+        self._prev_da_screen = screen
 
         # Win detection — ONLY on results/save screens, never during the battle
         # load. Throttled to ~once per second (380 flag reads is expensive).
@@ -880,6 +1052,15 @@ async def pcsx2_sync_task(ctx: B3Context):
             ctx.draw_goal_counter()
 
             screen = ctx.iface.get_screen()
+
+            # DeathLink — run every poll, independent of other handlers, since it
+            # only needs screen + HP. Wrapped so a transient read error can't
+            # break the cycle.
+            if ctx.death_link:
+                try:
+                    ctx._handle_deathlink()
+                except Exception as e:
+                    logger.debug(f"[B3] deathlink error: {e}")
 
             # DU Credits completion checks / YAML goal count
             await ctx._handle_du_completion(screen)

@@ -19,6 +19,7 @@ from .data.Constants import (
     ADDR_P1_CHAR, ADDR_P1_CHAR_T4, ADDR_P1_CAPS,
     ADDR_P2_CHAR, ADDR_P2_CHAR_T4, ADDR_P2_CAPS,
     ADDR_STAGE_SELECT, ADDR_BATTLE_MOD, ADDR_MUSIC,
+    ADDR_P1_HP, HP_KILL_VALUE, ADDR_FIGHT_END_HP,
     ADDR_SHOP_STRUCT_BASE, SHOP_STRUCT_SIZE, SHOP_DISPLAY_BASE,
     SHOP_OWNERSHIP_BASE, SHOP_PRICE, SHOP_MAX_SLOTS, ADDR_SHOP_COUNT,
     SHOP_SIG0, SHOP_SIG1, SHOP_OFF_COUNT_FROM_SIG, SHOP_OFF_ITEMS_FROM_SIG,
@@ -623,6 +624,45 @@ class B3Interface:
     def get_screen(self) -> int:
         return self.pine.read16(ADDR_SCREEN)
 
+    # ── DeathLink ─────────────────────────────────────────────────────────────
+    def kill_player(self) -> bool:
+        """Incoming DeathLink: pin Player 1's HP float copies to a TINY NONZERO
+        value so the AI keeps attacking and lands the finishing blow (writing
+        true 0 makes the AI passive and never finishes the kill). Returns True if
+        any write went through. Meant to be called every poll until the fight
+        registers its end (ADDR_FIGHT_END_HP -> 0)."""
+        ok = False
+        for addr in ADDR_P1_HP:
+            try:
+                self.pine.write32(addr, HP_KILL_VALUE)
+                ok = True
+            except Exception:
+                pass
+        return ok
+
+    def fight_end_hp(self) -> int:
+        """Read the HP copy that clears to 0 when a fight ENDS (win or loss)."""
+        try:
+            return self.pine.read32(ADDR_FIGHT_END_HP)
+        except Exception:
+            return -1
+
+    def in_du_battle(self) -> bool:
+        """True while on the Dragon Universe battle screen (fight is live; the
+        retry/lose popup is an overlay that keeps this screen)."""
+        try:
+            return self.pine.read16(ADDR_SCREEN) == SCREEN_DU_BATTLE
+        except Exception:
+            return False
+
+    def on_results_win(self) -> bool:
+        """True on the win results screen (used to discriminate win from loss)."""
+        try:
+            return self.pine.read16(ADDR_SCREEN) == SCREEN_RESULTS_WIN
+        except Exception:
+            return False
+
+
     def get_mode(self) -> int:
         return self.pine.read8(ADDR_MODE)
 
@@ -965,11 +1005,20 @@ class B3Interface:
         return None
 
     def clamp_da_opponent_count(self, max_count: int):
-        """Force the arena opponent list count to max_count.
-        Writes unconditionally (not just when current > max) so the value
-        stays pinned even if the game resets it between polls."""
+        """Force the arena opponent list count to max_count, but only WRITE when
+        the current value actually exceeds max_count. Reading first and skipping
+        unnecessary writes minimizes how often we poke the list struct, shrinking
+        the window where a write could land during the fight-load teardown and
+        crash the emulator."""
         cnt_addr = self.find_da_count_addr()
         if cnt_addr is None:
+            return
+        try:
+            current = self.pine.read32(cnt_addr)
+        except Exception:
+            return
+        # Only clamp when needed; if already within the limit, do nothing.
+        if not (1 <= current <= 380) or current <= max_count:
             return
         try:
             self.pine.write32(cnt_addr, max_count)

@@ -197,6 +197,7 @@ class B3World(World):
             "dragon_arena_fights":     self.options.dragon_arena_fights.value,
             "arenasanity":             self.options.arenasanity.value,
             "dragonsanity":            self.options.dragonsanity.value,
+            "death_link":              self.options.death_link.value,
             "seed":               self.multiworld.seed_name,
             "starting_character": getattr(self, "starting_character", "Goku DU"),
         }

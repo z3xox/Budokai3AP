@@ -59,6 +59,16 @@ class DrainTrap(Toggle):
     default = 0
 
 
+class DeathLink(Toggle):
+    """When ON, losing a Dragon Universe battle sends a death to everyone else in
+    the multiworld playing with DeathLink, and receiving a death drains your
+    fighter's health so the opponent finishes you (forcing a loss in your current
+    fight). If you're not in a fight when a death arrives, it applies to your
+    next fight."""
+    display_name = "Death Link"
+    default = 0
+
+
 class Goal(Choice):
     """How to win.
       du_completions      = complete the required number of Dragon Universe runs
@@ -161,3 +171,4 @@ class B3Options(PerGameCommonOptions):
     dragon_arena_fights: DragonArenaFights
     arenasanity: Arenasanity
     dragonsanity: Dragonsanity
+    death_link: DeathLink

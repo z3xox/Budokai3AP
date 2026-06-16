@@ -214,6 +214,21 @@ ADDR_STAGE_SELECT  = 0x0044B6F4
 ADDR_MUSIC         = 0x0044B6F6   # stage_select + 0x02; single byte, range 0-22
 ADDR_BATTLE_MOD    = 0x0044B708   # 0x00020003 = HP drain
 
+# ─── DeathLink (NTSC-U, live-confirmed) ──────────────────────────────────────
+# Incoming kill: pin the live HP copies to a TINY NONZERO float so the AI keeps
+# attacking and lands the finishing blow (writing true 0 makes the AI passive).
+# 0x3B9ACA00 == float ~0.0047. Player-1 HP float copies (live triplet + the
+# fight-end-cleared copies) are all pinned low each poll until death registers.
+ADDR_P1_HP = [0x0044CEC0, 0x0044CEC4, 0x0044CEC8,
+              0x0044CF00, 0x0044CF0C, 0x0044CF10]
+HP_KILL_VALUE = 0x3B9ACA00        # float ~0.0047 — tiny but nonzero
+# Outgoing death: 0x0044CF00 (a HP copy) is CLEARED to 0 when the fight ENDS
+# (both win and loss). Discriminate via screen: a WIN moves screen to
+# SCREEN_RESULTS_WIN (0x010A); a LOSS stays in SCREEN_DU_BATTLE (0x0109) with
+# the retry-popup overlay.
+ADDR_FIGHT_END_HP = 0x0044CF00     # nonzero -> 0 on fight end
+
+
 # Music randomization: valid in-battle track IDs (single byte at ADDR_MUSIC).
 MUSIC_TRACKS = list(range(0, 23))   # 0..22 inclusive
 
