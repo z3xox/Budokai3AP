@@ -3,7 +3,7 @@ from typing import Dict, Any, Mapping
 logger = logging.getLogger(__name__)
 from BaseClasses import Item, ItemClassification, Tutorial
 from worlds.AutoWorld import World, WebWorld
-from .Items import (item_table, create_item,
+from .Items import (item_table, create_item, B3Item,
                     CHARACTER_ITEMS, CAPSULE_ITEMS, TRAP_ITEMS)
 from .Locations import location_table, get_location_names, DU_BATTLE_LOCATIONS, SHOP_LOCATIONS, DU_COMPLETION_LOCATIONS
 from .Options import B3Options
@@ -49,6 +49,13 @@ class B3World(World):
 
     def create_regions(self):
         create_regions(self)
+
+    def create_item(self, name: str) -> B3Item:
+        """Create a single item by name. Required as a World METHOD (distinct
+        from the module-level helper) because Archipelago core and tools like
+        Universal Tracker call multiworld.create_item(name) -> world.create_item.
+        Without this override the base World.create_item raises NotImplementedError."""
+        return create_item(self, name)
 
     def create_items(self):
         pool = []

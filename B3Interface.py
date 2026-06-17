@@ -462,6 +462,7 @@ class B3Interface:
         self._da_count_cache = None  # cached arena count address (per session)
         self._shop_sig_cache = None  # cached ess_shop.c anchor (per load)
         self._cave_supported = True  # False for versions without cave addresses
+        self._deathlink_supported = False  # set True at connect if HP addrs mapped
         self._version = VERSIONS.get(GAME_CRC, {})
         self._installed_cave_code = None
         self._prev_screen = -1
@@ -543,6 +544,8 @@ class B3Interface:
             "shop_ownership_base":  "SHOP_OWNERSHIP_BASE",
             "du_char_capsules":     "DU_CHAR_CAPSULES",
             "du_bases":             "DU_BASES",
+            "addr_p1_hp":           "ADDR_P1_HP",
+            "addr_fight_end_hp":     "ADDR_FIGHT_END_HP",
         }
         for ver_key, const_name in mapping.items():
             if ver_key in ver and ver[ver_key] is not None:
@@ -554,6 +557,12 @@ class B3Interface:
             self.logger.info("[B3] Fight cave not supported for this version — randomization disabled")
         else:
             self._cave_supported = True
+        # DeathLink requires the version's HP addresses. If absent/None, disable.
+        if ver.get("addr_p1_hp") is None or ver.get("addr_fight_end_hp") is None:
+            self._deathlink_supported = False
+            self.logger.info("[B3] DeathLink not supported for this version (HP addresses not mapped).")
+        else:
+            self._deathlink_supported = True
 
     def disconnect(self):
         self.pine.disconnect()

@@ -196,6 +196,9 @@ class B3Context(CommonContext):
         death we were handed doesn't echo back out."""
         if not self.death_link:
             return
+        # Skip if this game version doesn't have DeathLink addresses mapped.
+        if not getattr(self.iface, "_deathlink_supported", False):
+            return
         try:
             screen = self.iface.get_screen()
         except Exception:

@@ -12,6 +12,10 @@ VERSIONS = {
     "c97ef0a4": {  # NTSC-U, SLUS-20998
         "game_id":          "SLUS-20998",
         "addr_screen":      0x0046A5B0,
+        # DeathLink (NTSC-U live-confirmed)
+        "addr_p1_hp":       [0x0044CEC0, 0x0044CEC4, 0x0044CEC8,
+                             0x0044CF00, 0x0044CF0C, 0x0044CF10],
+        "addr_fight_end_hp": 0x0044CF00,
         "addr_mode":        0x00543C20,
         "addr_du_char":     0x00543C24,
         "addr_zenie_rt":    0x00543D28,
@@ -93,6 +97,12 @@ VERSIONS = {
     "2a4b60eb": {  # Black Label (PAL/other), CRC 2A4B60EB
         "game_id":          "SLES-XXXXX",  # update with real serial
         "addr_screen":      0x004B4B40,
+        # DeathLink (BL): 0x00497B60 is the HP control — reads 0 on fight end
+        # (win/loss) and re-initializes on restart, same role NTSC-U's 0x0044CF00
+        # plays. Used as both the kill target and the fight-end marker. Win/loss
+        # is discriminated via addr_screen (already mapped for BL).
+        "addr_p1_hp":        [0x00497B60],
+        "addr_fight_end_hp": 0x00497B60,
         "addr_mode":        0x0058F660,
         "addr_du_char":     0x0058F664,
         "addr_zenie_rt":    0x0058F718,    # confirmed: persistent RT Zenie
@@ -214,19 +224,20 @@ ADDR_STAGE_SELECT  = 0x0044B6F4
 ADDR_MUSIC         = 0x0044B6F6   # stage_select + 0x02; single byte, range 0-22
 ADDR_BATTLE_MOD    = 0x0044B708   # 0x00020003 = HP drain
 
-# ─── DeathLink (NTSC-U, live-confirmed) ──────────────────────────────────────
-# Incoming kill: pin the live HP copies to a TINY NONZERO float so the AI keeps
-# attacking and lands the finishing blow (writing true 0 makes the AI passive).
-# 0x3B9ACA00 == float ~0.0047. Player-1 HP float copies (live triplet + the
-# fight-end-cleared copies) are all pinned low each poll until death registers.
+# ─── DeathLink (version-aware; NTSC-U live-confirmed) ────────────────────────
+# Incoming kill: pin the live HP float copies to a TINY NONZERO float so the AI
+# keeps attacking and lands the finishing blow (writing true 0 makes the AI
+# passive). 0x3B9ACA00 == float ~0.0047. These ADDRESSES are region-specific and
+# get patched per-version from VERSIONS (addr_p1_hp / addr_fight_end_hp). The
+# values below are the NTSC-U defaults / fallback.
 ADDR_P1_HP = [0x0044CEC0, 0x0044CEC4, 0x0044CEC8,
               0x0044CF00, 0x0044CF0C, 0x0044CF10]
-HP_KILL_VALUE = 0x3B9ACA00        # float ~0.0047 — tiny but nonzero
+HP_KILL_VALUE = 0x3B9ACA00        # float ~0.0047 — region-INDEPENDENT (float bits)
 # Outgoing death: 0x0044CF00 (a HP copy) is CLEARED to 0 when the fight ENDS
 # (both win and loss). Discriminate via screen: a WIN moves screen to
-# SCREEN_RESULTS_WIN (0x010A); a LOSS stays in SCREEN_DU_BATTLE (0x0109) with
-# the retry-popup overlay.
-ADDR_FIGHT_END_HP = 0x0044CF00     # nonzero -> 0 on fight end
+# SCREEN_RESULTS_WIN (0x010A); a LOSS stays in SCREEN_DU_BATTLE (0x0109).
+ADDR_FIGHT_END_HP = 0x0044CF00     # nonzero -> 0 on fight end (NTSC-U default)
+
 
 
 # Music randomization: valid in-battle track IDs (single byte at ADDR_MUSIC).
