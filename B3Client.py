@@ -126,12 +126,52 @@ class B3Context(CommonContext):
         self._randomize_music: bool = False
         self._dark_star_balls_received: int = 0
         self._goal_label = None              # GUI goal-progress label
+        self._traps_seen: int = 0            # HP Drain Traps already accounted for (baseline)
+        self._traps_baselined: bool = False  # baseline set in _on_connected yet?
+        self._pending_drain_traps: int = 0   # traps queued to apply to upcoming fights
+        self._drain_armed: bool = True       # re-arm so each fight consumes at most one
+        self._drain_active_fight: bool = False  # current fight is dedicated to a drain
 
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
             await super().server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
+
+    # ── Goal counts derived from server truth (reconnect-safe) ────────────────
+    # We compute these on demand from authoritative server state rather than
+    # maintaining running counters. Running counters reset to 0 on reconnect and
+    # either lose progress (DU completions) or rely on item replay (which also
+    # re-runs cumulative side effects). Deriving from items_received /
+    # checked_locations is always correct and immune to reconnects.
+    def count_dark_star_balls(self) -> int:
+        """Number of Dark Star Dragon Balls received (counted from the server's
+        full items_received list, so reconnect-safe and never duplicated)."""
+        try:
+            from .Items import DARK_STAR_BALL_ITEM
+            return sum(1 for it in self.items_received
+                       if self.item_names.lookup_in_game(it.item) == DARK_STAR_BALL_ITEM)
+        except Exception:
+            return 0
+
+    def count_du_completions(self) -> int:
+        """Number of completed Dragon Universe campaigns (counted from checked
+        DU-completion locations on the server, so reconnect-safe)."""
+        try:
+            from .Locations import DU_COMPLETION_LOCATIONS
+            done_ids = set(DU_COMPLETION_LOCATIONS.values())
+            return sum(1 for loc in self.checked_locations if loc in done_ids)
+        except Exception:
+            return 0
+
+    def count_drain_traps(self) -> int:
+        """Total HP Drain Traps received (counted from items_received, so the
+        total is always correct and never duplicated on reconnect)."""
+        try:
+            return sum(1 for it in self.items_received
+                       if self.item_names.lookup_in_game(it.item) == "HP Drain Trap")
+        except Exception:
+            return 0
 
     def make_gui(self):
         ui = super().make_gui()
@@ -160,9 +200,9 @@ class B3Context(CommonContext):
                 self._goal_label.text = ""
                 return
             goal = int(sd.get("goal", 0))
-            balls_have = self._dark_star_balls_received
+            balls_have = self.count_dark_star_balls()
             balls_need = int(sd.get("dark_star_balls_required", 7))
-            du_have = len(self.completed_dus)
+            du_have = self.count_du_completions()
             du_need = max(1, min(int(sd.get("required_du_completions", 1)), 11))
 
             if goal == 1:        # dark_star_dragon_balls
@@ -327,6 +367,21 @@ class B3Context(CommonContext):
         self.unlocked_characters = {char_name}
         logger.info(f"[B3] Starting character: {char_name}")
 
+        # Note: DU completion and Dark Star Ball goal progress are derived on
+        # demand from the server's checked_locations / items_received (see
+        # count_du_completions / count_dark_star_balls), so there is nothing to
+        # restore here — they are always correct across reconnects.
+
+        # HP Drain Trap baseline: traps already received before this session are
+        # considered accounted-for (we can't know which were already applied to
+        # fights, so we don't re-apply them — avoids dumping a stack of drains on
+        # reconnect). Only traps that arrive AFTER connect queue for the next
+        # fight. (Traps are filler; skipping a few received while offline is far
+        # better than duplicating them.)
+        self._traps_seen = self.count_drain_traps()
+        self._pending_drain_traps = 0
+        self._traps_baselined = True
+
         # Dragon Arena config
         self.da_fights_total = int(self.slot_data.get("dragon_arena_fights", 0)) if self.slot_data else 0
         if self.slot_data and int(self.slot_data.get("arenasanity", 0)):
@@ -372,9 +427,10 @@ class B3Context(CommonContext):
     def _apply_item(self, name: str):
         """Write the effect of a received item to game memory."""
         if name == "Dark Star Dragon Ball":
-            self._dark_star_balls_received += 1
-            logger.info(f"[B3] Dark Star Dragon Ball collected "
-                        f"({self._dark_star_balls_received} total)")
+            # No counter to maintain — the goal derives the count directly from
+            # items_received (reconnect-safe). Just re-check the goal.
+            logger.info("[B3] Dark Star Dragon Ball received "
+                        f"({self.count_dark_star_balls()} total)")
             asyncio.create_task(self._maybe_send_goal())
             return
 
@@ -420,7 +476,10 @@ class B3Context(CommonContext):
             self.iface.write_zenie(amounts.get(name, 0))
 
         elif name == "HP Drain Trap":
-            # Drain trap is handled per-fight in matchup data
+            # No per-item increment (that would re-queue every trap on reconnect
+            # when items replay). The pending count is derived: total HP Drain
+            # Traps received minus how many we've already applied to fights. See
+            # _service_drain_trap.
             logger.info("[B3] HP Drain Trap received! Will apply to next fight.")
 
     # ── Matchup / cave ────────────────────────────────────────────────────────
@@ -475,9 +534,11 @@ class B3Context(CommonContext):
             p1_form = pick_form(p1_name) if rand_p1 else 0
             p2_form = pick_form(p2_name) if rand_p2 else 0
 
+            # HP Drain is NO LONGER pre-scattered here. It is an Archipelago TRAP
+            # item: when an "HP Drain Trap" is received, it is applied to the next
+            # fight via the polling path (_service_drain_trap). So matchups never
+            # carry a static drain flag.
             drain = False
-            if drain_trap and rng.random() < 0.2:
-                drain = True
 
             self.matchups[key] = {
                 "p1": {"char": p1_char, "bt": p1_bt, "name": p1_name, "form": p1_form},
@@ -489,8 +550,10 @@ class B3Context(CommonContext):
                 "write_p2": rand_p2,
             }
 
-        # If nothing is randomized (no P1, no P2, no stages, no drain, no music), skip cave entirely
-        self._cave_needed = rand_p1 or rand_p2 or randomize_stages or drain_trap or randomize_music
+        # If nothing is randomized (no P1, no P2, no stages, no music), skip cave
+        # entirely. Drain is no longer cave-based (it's a polling trap), so it no
+        # longer forces the cave on.
+        self._cave_needed = rand_p1 or rand_p2 or randomize_stages or randomize_music
         self._randomize_music = randomize_music
         logger.info(f"[B3] Built {len(self.matchups)} matchups "
                     f"(P1={rand_p1}, P2={rand_p2}, stages={randomize_stages}, music={randomize_music})")
@@ -565,6 +628,60 @@ class B3Context(CommonContext):
                 getattr(self, "_music_track_pending", None) is not None:
             self.iface.write_music(self._music_track_pending)
             self._music_reassert -= 1
+
+    def _service_drain_trap(self):
+        """Apply received HP Drain Traps to upcoming fights. Runs every poll.
+
+        New traps are detected by comparing the current total (counted from
+        items_received) against a baseline set at connect, so a reconnect never
+        re-applies old traps. When a trap is pending and a fight starts, we
+        dedicate that trap to THIS fight and then re-assert the HP-drain battle
+        modifier every poll until the fight ends — the game reads 0x44B708
+        continuously, and a single write at the fight-load transition gets
+        overwritten during init, so it must be held for the fight's duration."""
+        # don't act until the connect baseline is set, or we'd treat all
+        # previously-received traps as new on the first poll.
+        if not getattr(self, "_traps_baselined", False):
+            return
+        # pick up any newly-arrived traps since the baseline
+        total = self.count_drain_traps()
+        if total > self._traps_seen:
+            self._pending_drain_traps += (total - self._traps_seen)
+            self._traps_seen = total
+            logger.info(f"[B3] HP Drain Trap queued "
+                        f"({self._pending_drain_traps} pending).")
+
+        try:
+            screen = self.iface.get_screen()
+        except Exception:
+            return
+        # "In a real fight" = the DU battle screen specifically (0x0109). Using
+        # the raw battle_state instead would also be true during character
+        # select / fight setup, which would consume a trap before the actual
+        # fight. The DeathLink path uses this same screen gate.
+        in_fight = (screen == 0x0109)   # SCREEN_DU_BATTLE
+
+        if not in_fight:
+            # not in an actual fight (char select, results, map, load) — clear
+            # the per-fight drain and re-arm for the next real fight
+            self._drain_active_fight = False
+            self._drain_armed = True
+            return
+
+        # A fight is active. If a trap is pending and this fight isn't already
+        # dedicated to a drain, consume one trap for it.
+        if not getattr(self, "_drain_active_fight", False):
+            if self._pending_drain_traps > 0 and getattr(self, "_drain_armed", True):
+                self._pending_drain_traps -= 1
+                self._drain_active_fight = True
+                self._drain_armed = False
+                logger.info(f"[B3] HP Drain Trap applied to this fight "
+                            f"({self._pending_drain_traps} pending).")
+
+        # While this fight is drained, RE-ASSERT the modifier every poll so it
+        # sticks through init overwrites and for the whole fight.
+        if getattr(self, "_drain_active_fight", False):
+            self.iface.write_battle_mod(0x00020003)   # HP drain
 
     # ── Shop ─────────────────────────────────────────────────────────────────
 
@@ -963,9 +1080,13 @@ class B3Context(CommonContext):
             logger.warning(f"[B3] DU credits reached for unknown DU char id 0x{char_id:02X}")
             return
 
-        if char_id not in self.completed_dus:
-            self.completed_dus.add(char_id)
-            logger.info(f"[B3] DU complete: {loc_name} ({len(self.completed_dus)} total)")
+        # Dedupe against the server's checked_locations (reconnect-safe) rather
+        # than an in-memory set, so a reconnect doesn't re-send and the goal
+        # count (derived from checked_locations) stays correct.
+        from .Locations import DU_COMPLETION_LOCATIONS
+        loc_id = DU_COMPLETION_LOCATIONS.get(loc_name)
+        if loc_id is not None and loc_id not in self.checked_locations:
+            logger.info(f"[B3] DU complete: {loc_name}")
             await self._send_check(loc_name)
         else:
             logger.info(f"[B3] DU credits reached again: {loc_name} already counted")
@@ -981,10 +1102,10 @@ class B3Context(CommonContext):
         goal = int(sd.get("goal", 0))
 
         required_du = max(1, min(int(sd.get("required_du_completions", 1)), 11))
-        du_ok = len(self.completed_dus) >= required_du
+        du_ok = self.count_du_completions() >= required_du
 
         balls_required = int(sd.get("dark_star_balls_required", 7))
-        balls_have = self._dark_star_balls_received
+        balls_have = self.count_dark_star_balls()
         balls_ok = balls_have >= balls_required
 
         if goal == 1:        # dark_star_dragon_balls
@@ -1093,6 +1214,9 @@ async def pcsx2_sync_task(ctx: B3Context):
 
             # BL music-write path (no-op on NTSC-U / when music randomization off)
             ctx._service_music()
+
+            # HP Drain Trap: apply a received trap to the next fight
+            ctx._service_drain_trap()
 
             # Reapply character locks periodically (in case game resets them on load)
             if not hasattr(ctx, '_lock_reapply_counter'):

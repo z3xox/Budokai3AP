@@ -696,6 +696,15 @@ class B3Interface:
         except Exception:
             pass
 
+    def write_battle_mod(self, value: int):
+        """Write the battle-modifier word (0x00020003 = HP drain, 0 = none).
+        Used by the polling-based HP Drain Trap path so a received trap is
+        applied to the upcoming fight rather than baked into the seed."""
+        try:
+            self.pine.write32(ADDR_BATTLE_MOD, value & 0xFFFFFFFF)
+        except Exception:
+            pass
+
     def any_fight_loading(self) -> bool:
         """Returns True if a fight is loading or in progress.
         Uses screen ID — only safe to install cave on world map (0x0108)."""
