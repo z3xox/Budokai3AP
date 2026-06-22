@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from Options import Toggle, Choice, Range, PerGameCommonOptions
+from Options import Toggle, DefaultOnToggle, Choice, Range, PerGameCommonOptions
 
 
 class RandomizeFights(Toggle):
@@ -57,6 +57,13 @@ class DrainTrap(Toggle):
     """Include HP Drain Trap items in the item pool."""
     display_name = "Drain Traps"
     default = 0
+
+
+class StartWithDragonRadar(DefaultOnToggle):
+    """Start every Dragon Universe with the Dragon Radar already obtained, so you
+    can immediately track Dragon Balls instead of having to find the radar first.
+    Applies to whichever character's DU you are playing. On by default."""
+    display_name = "Start with Dragon Radar"
 
 
 class DeathLink(Toggle):
@@ -167,6 +174,7 @@ class B3Options(PerGameCommonOptions):
     randomize_transformations: RandomizeTransformations
     shop_slots: ShopSlots
     drain_trap: DrainTrap
+    start_with_dragon_radar: StartWithDragonRadar
     required_du_completions: RequiredDUCompletions
     dragon_arena_fights: DragonArenaFights
     arenasanity: Arenasanity

@@ -19,6 +19,7 @@ from .data.Constants import (
     ADDR_P1_CHAR, ADDR_P1_CHAR_T4, ADDR_P1_CAPS,
     ADDR_P2_CHAR, ADDR_P2_CHAR_T4, ADDR_P2_CAPS,
     ADDR_STAGE_SELECT, ADDR_BATTLE_MOD, ADDR_MUSIC,
+    DU_RADAR_ADDR, DU_RADAR_OBTAINED,
     ADDR_P1_HP, HP_KILL_VALUE, ADDR_FIGHT_END_HP,
     ADDR_SHOP_STRUCT_BASE, SHOP_STRUCT_SIZE, SHOP_DISPLAY_BASE,
     SHOP_OWNERSHIP_BASE, SHOP_PRICE, SHOP_MAX_SLOTS, ADDR_SHOP_COUNT,
@@ -704,6 +705,22 @@ class B3Interface:
             self.pine.write32(ADDR_BATTLE_MOD, value & 0xFFFFFFFF)
         except Exception:
             pass
+
+    def grant_dragon_radar(self) -> bool:
+        """Set the Dragon Radar 'obtained' flag for the currently-active Dragon
+        Universe character (address depends on which DU is being played). Returns
+        True if newly set this call. Safe to call every poll while in DU."""
+        try:
+            cid = self.get_du_char()
+            addr = DU_RADAR_ADDR.get(cid)
+            if addr is None:
+                return False
+            if self.pine.read8(addr) != DU_RADAR_OBTAINED:
+                self.pine.write8(addr, DU_RADAR_OBTAINED)
+                return True
+        except Exception:
+            pass
+        return False
 
     def any_fight_loading(self) -> bool:
         """Returns True if a fight is loading or in progress.

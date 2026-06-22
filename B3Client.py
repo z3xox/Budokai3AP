@@ -1218,6 +1218,14 @@ async def pcsx2_sync_task(ctx: B3Context):
             # HP Drain Trap: apply a received trap to the next fight
             ctx._service_drain_trap()
 
+            # Start with Dragon Radar: grant the radar to the active DU character
+            if ctx.slot_data and ctx.slot_data.get("start_with_dragon_radar", 1):
+                try:
+                    if ctx.iface.in_du() and ctx.iface.grant_dragon_radar():
+                        logger.debug("[B3] Dragon Radar granted to active DU character")
+                except Exception as e:
+                    logger.debug(f"[B3] radar grant error: {e}")
+
             # Reapply character locks periodically (in case game resets them on load)
             if not hasattr(ctx, '_lock_reapply_counter'):
                 ctx._lock_reapply_counter = 0

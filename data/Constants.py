@@ -224,6 +224,24 @@ ADDR_STAGE_SELECT  = 0x0044B6F4
 ADDR_MUSIC         = 0x0044B6F6   # stage_select + 0x02; single byte, range 0-22
 ADDR_BATTLE_MOD    = 0x0044B708   # 0x00020003 = HP drain
 
+# Dragon Radar "obtained" flag, per Dragon Universe character (write 0x01 to
+# grant). Keyed by the DU character id (ADDR_DU_CHAR / DU_BASES du_id), so the
+# "start with Dragon Radar" option can grant it to whichever DU is active.
+DU_RADAR_ADDR = {
+    0x00: 0x0049D285,   # Goku
+    0x02: 0x0049F6A5,   # Kid Gohan
+    0x03: 0x004A08B5,   # Teen Gohan
+    0x04: 0x004A1AC5,   # Adult Gohan
+    0x07: 0x004A50F5,   # Vegeta
+    0x0A: 0x004A8725,   # Krillin
+    0x0B: 0x004A9935,   # Piccolo
+    0x0C: 0x004AAB45,   # Tien
+    0x0D: 0x004ABD55,   # Yamcha
+    0x11: 0x004B0595,   # Uub
+    0x22: 0x004C38A5,   # Broly
+}
+DU_RADAR_OBTAINED = 0x01
+
 # ─── DeathLink (version-aware; NTSC-U live-confirmed) ────────────────────────
 # Incoming kill: pin the live HP float copies to a TINY NONZERO float so the AI
 # keeps attacking and lands the finishing blow (writing true 0 makes the AI

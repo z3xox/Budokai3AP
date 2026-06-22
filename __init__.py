@@ -200,6 +200,7 @@ class B3World(World):
             "randomize_transformations": self.options.randomize_transformations.value,
             "shop_slots":         self.options.shop_slots.value,
             "drain_trap":         self.options.drain_trap.value,
+            "start_with_dragon_radar": self.options.start_with_dragon_radar.value,
             "required_du_completions": self.options.required_du_completions.value,
             "dragon_arena_fights":     self.options.dragon_arena_fights.value,
             "arenasanity":             self.options.arenasanity.value,
