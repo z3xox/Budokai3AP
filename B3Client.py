@@ -221,6 +221,14 @@ class B3Context(CommonContext):
             self.slot_data = args.get("slot_data", {})
             logger.info(f"[B3] Slot data: {self.slot_data}")
             asyncio.create_task(self._on_connected())
+        elif cmd == "RoomUpdate":
+            # checked_locations is only updated once the server echoes our
+            # LocationChecks (not at send time). The DU-completion goal counts
+            # from checked_locations, so we must re-evaluate the goal here, after
+            # the echo lands — otherwise the final DU completion never triggers
+            # the goal (it was counted one short at send time). Dark Star Balls
+            # don't hit this because they count from items_received.
+            asyncio.create_task(self._maybe_send_goal())
 
     def on_deathlink(self, data: dict):
         """Incoming DeathLink: buffer a death to apply to the current/next DU
