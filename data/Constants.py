@@ -103,6 +103,17 @@ VERSIONS = {
         # is discriminated via addr_screen (already mapped for BL).
         "addr_p1_hp":        [0x00497B60],
         "addr_fight_end_hp": 0x00497B60,
+        # Screen IDs are ASSUMED the same as NTSC-U (only addr_screen differs).
+        # If a BL win never reaches SCREEN_RESULTS_WIN, DeathLink would report
+        # every win as a death — uncomment and correct the real IDs here, no
+        # client change needed. The [B3] DeathLink screen log prints them.
+        # "screen_du_battle":   0x0109,
+        # "screen_results_win": 0x010A,
+        # "screen_da_battle":   0x0619,
+        # "screen_da_entrance": 0x0617,
+        # "screen_da_charsel":  0x0618,
+        # "screen_da_results":  (0x061A, 0x061B),
+        # "screen_da_list":     (0x0617, 0x0618),  # defaults to entrance+charsel
         "addr_mode":        0x0058F660,
         "addr_du_char":     0x0058F664,
         "addr_zenie_rt":    0x0058F718,    # confirmed: persistent RT Zenie
@@ -199,6 +210,7 @@ ORIG_INSTR         = 0x864206B0   # lh v0,0x6B0(s2)
 # ─── Game State ──────────────────────────────────────────────────────────────
 ADDR_SCREEN        = 0x0046A5B0   # 16-bit screen ID
 ADDR_MODE          = 0x00543C20   # DU mode byte (0x01 = DU)
+DU_MODE            = 0x01         # value ADDR_MODE holds while in Dragon Universe
 # Skill capsule table bases (overridden per-version). SKILL_CAPSULES holds
 # NTSC-U absolute addresses; apply_skill_locks translates them to the active
 # version using these bases.
@@ -255,6 +267,15 @@ HP_KILL_VALUE = 0x3B9ACA00        # float ~0.0047 — region-INDEPENDENT (float 
 # (both win and loss). Discriminate via screen: a WIN moves screen to
 # SCREEN_RESULTS_WIN (0x010A); a LOSS stays in SCREEN_DU_BATTLE (0x0109).
 ADDR_FIGHT_END_HP = 0x0044CF00     # nonzero -> 0 on fight end (NTSC-U default)
+# The HP copy clears at the KO, but the win screen only appears once the KO
+# camera ends, so a poll can see "fight over" before it can see "we won".
+# Hold an unconfirmed loss this long, waiting for SCREEN_RESULTS_WIN, before
+# treating it as a real death.
+DL_LOSS_CONFIRM_SECS = 5.0
+# Consecutive polls (0.1s each) spent outside every arena screen before an
+# unfinished arena fight is forgotten. Long enough that a transition screen
+# between the battle and the opponent list can't drop a real loss.
+DL_ARENA_AWAY_POLLS = 10
 
 
 
@@ -314,7 +335,7 @@ FIGHT_LOCATIONS = {
     ("Kid Gohan", 0x00, 0x18): "Kid Gohan DU - Saibaman",
     ("Kid Gohan", 0x00, 0x06): "Kid Gohan DU - Nappa",
     ("Kid Gohan", 0x01, 0x01): "Kid Gohan DU - Recoome",
-    ("Kid Gohan", 0x01, 0x05): "Kid Gohan DU - First Form Frieza",
+    ("Kid Gohan", 0x01, 0x05): "Kid Gohan DU - Frieza 3rd Form",
     # Teen Gohan DU
     ("Teen Gohan", 0x02, 0x01): "Teen Gohan DU - Piccolo",
     ("Teen Gohan", 0x02, 0x03): "Teen Gohan DU - Krillin",
@@ -332,7 +353,7 @@ FIGHT_LOCATIONS = {
     ("Krillin", 0x00, 0x10): "Krillin DU - Saibaman",
     ("Krillin", 0x01, 0x01): "Krillin DU - Recoome",
     ("Krillin", 0x01, 0x03): "Krillin DU - Ginyu as Goku",
-    ("Krillin", 0x01, 0x05): "Krillin DU - Frieza Second Form",
+    ("Krillin", 0x01, 0x05): "Krillin DU - Frieza 2nd Form",
     ("Krillin", 0x01, 0x07): "Krillin DU - Frieza Final Form",
     ("Krillin", 0x01, 0x09): "Krillin DU - Frieza Final Form (Ginyu)",
     ("Krillin", 0x02, 0x01): "Krillin DU - Perfect Cell",
@@ -350,8 +371,8 @@ FIGHT_LOCATIONS = {
     ("Piccolo", 0x01, 0x07): "Piccolo DU - Cooler",
     ("Piccolo", 0x01, 0x0B): "Piccolo DU - Metal Cooler",
     ("Piccolo", 0x02, 0x01): "Piccolo DU - Dr. Gero",
-    ("Piccolo", 0x02, 0x04): "Piccolo DU - Cell 1st Form",
-    ("Piccolo", 0x02, 0x05): "Piccolo DU - Cell 1st Form (Baba)",
+    ("Piccolo", 0x02, 0x04): "Piccolo DU - Imperfect Cell",
+    ("Piccolo", 0x02, 0x05): "Piccolo DU - Imperfect Cell (Baba)",
     ("Piccolo", 0x02, 0x07): "Piccolo DU - Perfect Cell",
     ("Piccolo", 0x02, 0x09): "Piccolo DU - Android 17",
     ("Piccolo", 0x03, 0x01): "Piccolo DU - Dabura",
@@ -360,7 +381,7 @@ FIGHT_LOCATIONS = {
     # Tien DU
     ("Tien", 0x00, 0x08): "Tien DU - Saibamen",
     ("Tien", 0x00, 0x0C): "Tien DU - Nappa",
-    ("Tien", 0x02, 0x01): "Tien DU - Cell 2nd Form",
+    ("Tien", 0x02, 0x01): "Tien DU - Semi-Perfect Cell",
     ("Tien", 0x02, 0x03): "Tien DU - Cell Jr.",
     ("Tien", 0x03, 0x02): "Tien DU - Super Buu (Gotenks)",
     ("Tien", 0x03, 0x03): "Tien DU - Super Buu (Gotenks/Chiaotzu)",
@@ -388,13 +409,13 @@ FIGHT_LOCATIONS = {
     ("Vegeta", 0x05, 0x01): "Vegeta DU - Goku",
     ("Vegeta", 0x05, 0x03): "Vegeta DU - Kid Gohan",
     ("Vegeta", 0x01, 0x01): "Vegeta DU - Recoome",
-    ("Vegeta", 0x01, 0x03): "Vegeta DU - Frieza (1st Form)",
-    ("Vegeta", 0x01, 0x05): "Vegeta DU - Frieza (Final Form)",
+    ("Vegeta", 0x01, 0x03): "Vegeta DU - Frieza 1st Form",
+    ("Vegeta", 0x01, 0x05): "Vegeta DU - Frieza Final Form",
     ("Vegeta", 0x01, 0x07): "Vegeta DU - Cooler",
     ("Vegeta", 0x02, 0x01): "Vegeta DU - Android 17",
     ("Vegeta", 0x02, 0x03): "Vegeta DU - Android 18",
-    ("Vegeta", 0x02, 0x05): "Vegeta DU - Cell (17 Absorbed)",
-    ("Vegeta", 0x02, 0x07): "Vegeta DU - Cell (Perfect)",
+    ("Vegeta", 0x02, 0x05): "Vegeta DU - Semi-Perfect Cell",
+    ("Vegeta", 0x02, 0x07): "Vegeta DU - Perfect Cell",
     ("Vegeta", 0x03, 0x01): "Vegeta DU - Goku (SS2)",
     ("Vegeta", 0x03, 0x07): "Vegeta DU - Majin Buu",
     ("Vegeta", 0x03, 0x0A): "Vegeta DU - Super Buu (Gohan Absorbed)",
@@ -671,6 +692,10 @@ SHOP_OFF_ZENIE_FROM_SIG = None   # live shop Zenie display (BL only)
 # Scan window where the shop struct lives
 SHOP_SCAN_START = 0x00880000
 SHOP_SCAN_END   = 0x008E0000  # covers 0x00880000-0x008DFFFF including BL region
+# Minimum seconds between full signature scans. While the shop screen is up
+# but the struct isn't allocated yet, the sync loop asks every tick; without
+# this, scans stack up and stall the client.
+SHOP_SCAN_MIN_INTERVAL = 0.5
 
 # Shop capsule pool: (display_index, ownership_index, name)
 # Up to 50 capsules. Shop shows 10 at a time, restock items unlock more.

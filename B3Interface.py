@@ -4,6 +4,7 @@ Handles all game memory reads/writes and cave management.
 """
 import os
 import socket
+import time
 import struct
 import random
 from platform import system
@@ -25,14 +26,15 @@ from .data.Constants import (
     SHOP_OWNERSHIP_BASE, SHOP_PRICE, SHOP_MAX_SLOTS, ADDR_SHOP_COUNT,
     SHOP_SIG0, SHOP_SIG1, SHOP_OFF_COUNT_FROM_SIG, SHOP_OFF_ITEMS_FROM_SIG,
     SHOP_OFF_ZENIE_FROM_SIG,
-    SHOP_SCAN_START, SHOP_SCAN_END,
+    SHOP_SCAN_START, SHOP_SCAN_END, SHOP_SCAN_MIN_INTERVAL,
     SHOP_OFF_DISPLAY, SHOP_OFF_RECEIVED, SHOP_OFF_PRICE, SHOP_OFF_FLAGS,
     SHOP_CAPSULE_POOL,
     SKILL_CAPSULES, ITEM_CAPSULES,
     RT_CAPS_BASE, DU_RT_CAPS_BASE,
     NTSC_RT_CAPS_BASE, NTSC_DU_RT_CAPS_BASE,
     SHOP_PURCHASE_BASE, SHOP_PURCHASE_BY_DISPLAY,
-    SCREEN_DA_CHARSEL, SCREEN_DA_BATTLE, SCREEN_DA_RESULTS,
+    SCREEN_DA_ENTRANCE, SCREEN_DA_CHARSEL, SCREEN_DA_BATTLE,
+    SCREEN_DA_RESULTS, SCREEN_DA_SAVE,
     DA_TICKET_DISPLAY, DA_TICKET_OWNERSHIP, DA_TICKET_DU_RT,
     ADDR_DA_OPP_COUNT, ADDR_DA_CLEAR_BASE, DA_FIGHT_COUNT,
     DRAGON_BALL_ADDRS, SCREEN_SHENRON,
@@ -49,9 +51,14 @@ from .data.Constants import (
 # ─── PINE CLIENT ─────────────────────────────────────────────────────────────
 
 class Pine:
+    # Commands per batched IPC message (5 request bytes / 4 reply bytes each,
+    # well inside PINE's 64 KiB message limit).
+    MAX_BATCH = 1500
+
     def __init__(self, slot=28011):
         self._slot = slot
         self._sock: Optional[socket.socket] = None
+        self._batch_ok = True
 
     def connect(self) -> bool:
         try:
@@ -116,6 +123,42 @@ class Pine:
 
     def read32(self, addr: int) -> int:
         return int.from_bytes(self._send(self._req(2, addr))[-4:], "little")
+
+    def read32_many(self, addrs) -> list:
+        """Read many 32-bit words, batching several commands per IPC message.
+
+        PINE accepts back-to-back commands inside one message, so a memory
+        scan costs one round-trip per batch instead of one per word. Falls
+        back to single reads if the emulator ever answers a malformed batch.
+        """
+        out = []
+        if not self._batch_ok:
+            return [self._try_read32(a) for a in addrs]
+        for i in range(0, len(addrs), self.MAX_BATCH):
+            chunk = addrs[i:i + self.MAX_BATCH]
+            body = b"".join((2).to_bytes(1, "little") + a.to_bytes(4, "little")
+                            for a in chunk)
+            try:
+                resp = self._send((len(body) + 4).to_bytes(4, "little") + body)
+            except Exception:
+                resp = b""
+            payload = resp[5:]
+            if resp[4:5] != b"\x00" or len(payload) < 4 * len(chunk):
+                # Batching unsupported (or the reply desynced) — drop back to
+                # single reads for the rest of the session, on a clean socket.
+                self._batch_ok = False
+                self.disconnect()
+                self.connect()
+                return out + [self._try_read32(a) for a in addrs[i:]]
+            out.extend(int.from_bytes(payload[j * 4:j * 4 + 4], "little")
+                       for j in range(len(chunk)))
+        return out
+
+    def _try_read32(self, addr: int) -> int:
+        try:
+            return self.read32(addr)
+        except Exception:
+            return 0
 
     def write8(self, addr: int, val: int):
         self._send(self._req(4, addr, (val & 0xFF).to_bytes(1, "little")))
@@ -461,7 +504,9 @@ class B3Interface:
         self._game_id: Optional[str] = None
         self._cave_installed = False
         self._da_count_cache = None  # cached arena count address (per session)
-        self._shop_sig_cache = None  # cached ess_shop.c anchor (per load)
+        self._shop_sig_cache = None  # cached ess_shop.c anchors (per load)
+        self._shop_sig_known = []    # every anchor address seen this session
+        self._shop_scan_last = 0.0   # monotonic time of the last full scan
         self._cave_supported = True  # False for versions without cave addresses
         self._deathlink_supported = False  # set True at connect if HP addrs mapped
         self._version = VERSIONS.get(GAME_CRC, {})
@@ -470,6 +515,7 @@ class B3Interface:
         self._prev_battle_states: dict = {}   # char_name → last battle state
         self._prev_ownership: Optional[bytes] = None
         self._shop_open = False
+        self._load_screen_ids({})   # defaults until a version is detected
 
     # ── Connection ────────────────────────────────────────────────────────────
 
@@ -496,6 +542,26 @@ class B3Interface:
         except Exception as e:
             self.logger.warning(f"[B3] Connect error: {e}")
             return False
+
+    def _load_screen_ids(self, ver: dict):
+        """Resolve the screen IDs used to tell a win from a loss. The IDs are
+        assumed identical across versions, but only addr_screen is confirmed
+        per-version, so each one can be overridden in VERSIONS."""
+        def pick(key, default):
+            val = ver.get(key)
+            return default if val is None else val
+
+        self.screen_du_battle   = pick("screen_du_battle",   SCREEN_DU_BATTLE)
+        self.screen_results_win = pick("screen_results_win", SCREEN_RESULTS_WIN)
+        self.screen_da_battle   = pick("screen_da_battle",   SCREEN_DA_BATTLE)
+        self.screen_da_entrance = pick("screen_da_entrance", SCREEN_DA_ENTRANCE)
+        self.screen_da_charsel  = pick("screen_da_charsel",  SCREEN_DA_CHARSEL)
+        self.screen_da_results  = tuple(pick("screen_da_results",
+                                             (SCREEN_DA_RESULTS, SCREEN_DA_SAVE)))
+        # Entrance + opponent list: the screens an arena LOSS drops back to.
+        self.screen_da_list     = tuple(pick("screen_da_list",
+                                             (self.screen_da_entrance,
+                                              self.screen_da_charsel)))
 
     def _load_version_addrs(self, ver: dict):
         """Override module-level address constants with version-specific values."""
@@ -548,6 +614,7 @@ class B3Interface:
             "addr_p1_hp":           "ADDR_P1_HP",
             "addr_fight_end_hp":     "ADDR_FIGHT_END_HP",
         }
+        self._load_screen_ids(ver)
         for ver_key, const_name in mapping.items():
             if ver_key in ver and ver[ver_key] is not None:
                 setattr(mod, const_name, ver[ver_key])
@@ -837,40 +904,67 @@ class B3Interface:
 
     def find_all_shop_bases(self, use_cache=True):
         """
-        Find ALL ess_shop.c instances in 0x00880000-0x0089FFFF and return
-        their anchor addresses. There can be 2-3 instances; we write to all
-        so the active/displayed one always gets our AP stock.
+        Find ALL ess_shop.c instances in the scan window and return their
+        anchor addresses. There can be 2-3 instances; we write to all so the
+        active/displayed one always gets our AP stock.
         """
         # Validate cache — it stores a list now
         if use_cache and getattr(self, "_shop_sig_cache", None):
-            still_valid = []
-            for a in self._shop_sig_cache:
-                try:
-                    if (self.pine.read32(a) == SHOP_SIG0
-                            and self.pine.read32(a + 4) == SHOP_SIG1):
-                        still_valid.append(a)
-                except Exception:
-                    pass
+            still_valid = self._validate_shop_sigs(self._shop_sig_cache)
             if still_valid:
                 self._shop_sig_cache = still_valid
                 return still_valid
             self._shop_sig_cache = None
 
-        # Scan full region for all instances
+        # Cheap re-probe: the struct is re-allocated at the same addresses
+        # almost every time, so re-check the ones already seen this session
+        # (a couple of reads) before paying for a full scan.
+        if self._shop_sig_known:
+            found = self._validate_shop_sigs(self._shop_sig_known)
+            if found:
+                self._shop_sig_cache = found
+                return found
+
+        # Full scan, rate-limited so repeated misses (shop screen up, struct
+        # not allocated yet) can't stack up and freeze the client.
+        now = time.monotonic()
+        if now - self._shop_scan_last < SHOP_SCAN_MIN_INTERVAL:
+            return []
+        self._shop_scan_last = now
+
+        addrs = list(range(SHOP_SCAN_START, SHOP_SCAN_END, 4))
+        try:
+            words = self.pine.read32_many(addrs)
+        except Exception:
+            return []
         found = []
-        addr = SHOP_SCAN_START
-        while addr < SHOP_SCAN_END:
-            try:
-                if (self.pine.read32(addr) == SHOP_SIG0
-                        and self.pine.read32(addr + 4) == SHOP_SIG1):
-                    found.append(addr)
-                    addr += 8  # skip past this match
-                    continue
-            except Exception:
-                pass
-            addr += 4
+        i = 0
+        while i < len(words) - 1:
+            if words[i] == SHOP_SIG0 and words[i + 1] == SHOP_SIG1:
+                found.append(addrs[i])
+                i += 2  # skip past this match
+                continue
+            i += 1
         self._shop_sig_cache = found if found else None
+        for a in found:
+            if a not in self._shop_sig_known:
+                self._shop_sig_known.append(a)
         return found
+
+    def _validate_shop_sigs(self, addrs):
+        """Return the subset of addrs that still hold the ess_shop.c
+        signature, in one batched round-trip."""
+        probe = []
+        for a in addrs:
+            probe += [a, a + 4]
+        try:
+            words = self.pine.read32_many(probe)
+        except Exception:
+            return []
+        if len(words) < len(probe):
+            return []
+        return [a for i, a in enumerate(addrs)
+                if words[2 * i] == SHOP_SIG0 and words[2 * i + 1] == SHOP_SIG1]
 
     def _shop_count_addr(self, sig_addr):
         return sig_addr + SHOP_OFF_COUNT_FROM_SIG
@@ -970,7 +1064,7 @@ class B3Interface:
         self.pine.write8(DA_TICKET_DU_RT, 0x00)
 
     def get_da_screen_on_charsel(self) -> bool:
-        return self.get_screen() == SCREEN_DA_CHARSEL
+        return self.get_screen() == self.screen_da_charsel
 
     def find_da_count_addr(self, use_cache=True):
         """
@@ -1025,18 +1119,21 @@ class B3Interface:
             (0x00A91000, 0x00A92000),  # 0x00A91B00 (back from stage select)
         ]
         for scan_start, scan_end in scan_windows:
-            addr = scan_start
-            while addr < scan_end:
-                try:
-                    if self.pine.read32(addr) == SIG0 and self.pine.read32(addr + 4) == SIG1:
-                        cnt_addr = addr + 0x0C
+            addrs = list(range(scan_start, scan_end, 4))
+            try:
+                words = self.pine.read32_many(addrs)
+            except Exception:
+                continue
+            for i in range(len(words) - 1):
+                if words[i] == SIG0 and words[i + 1] == SIG1:
+                    cnt_addr = addrs[i] + 0x0C
+                    try:
                         cnt = self.pine.read32(cnt_addr)
-                        if 1 <= cnt <= 380:
-                            self._da_count_cache = cnt_addr
-                            return cnt_addr
-                except Exception:
-                    pass
-                addr += 4
+                    except Exception:
+                        continue
+                    if 1 <= cnt <= 380:
+                        self._da_count_cache = cnt_addr
+                        return cnt_addr
         return None
 
     def clamp_da_opponent_count(self, max_count: int):

@@ -27,10 +27,12 @@ CHARACTER_ITEMS = {
 
 from .data.Constants import SKILL_CAPSULES
 
-CAPSULE_ITEMS = {
+SKILL_ITEMS = {
     f"Skill: {name}": B3_BASE_ID + 0x100 + i
     for i, name in enumerate(SKILL_CAPSULES.keys())
 }
+
+CAPSULE_ITEMS = dict(SKILL_ITEMS)
 CAPSULE_ITEMS.update({
     "Zenie x500":   B3_BASE_ID + 0x110 + 0xA0,
     "Zenie x1000":  B3_BASE_ID + 0x111 + 0xA0,
@@ -98,7 +100,12 @@ def get_item_classification(name: str) -> ItemClassification:
         return ItemClassification.progression
     if name in ITEM_CAPSULE_ITEMS:
         return ItemClassification.filler
-    if name in SPECIAL_ITEMS:
+    # Skill capsules — Breakthroughs and the DU characters' own abilities
+    # (transformations, signature attacks). They don't gate any location, so
+    # they aren't progression, but they change how a fight plays, which is
+    # exactly what `useful` is for: weighted above filler and surfaced as
+    # worth chasing, without entering logic.
+    if name in SKILL_ITEMS:
         return ItemClassification.useful
     if name in TRAP_ITEMS:
         return ItemClassification.trap

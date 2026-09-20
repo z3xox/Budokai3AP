@@ -7,6 +7,7 @@ Usage:
   python B3Client.py --connect archipelago.gg:38281 --password mypass
 """
 import asyncio
+import time
 import traceback
 import random
 from typing import Optional
@@ -21,7 +22,8 @@ from NetUtils import NetworkItem, ClientStatus
 
 from .B3Interface import B3Interface, build_cave
 from .data.Constants import (
-    FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS,
+    FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS, DL_LOSS_CONFIRM_SECS,
+    DL_ARENA_AWAY_POLLS, DU_MODE,
     DU_BASES,
 )
 
@@ -46,6 +48,19 @@ class B3CommandProcessor(ClientCommandProcessor):
         ctx.cave_paused = False
         ctx.install_cave()
         logger.info("[B3] Cave reinstalled.")
+
+    def _cmd_deathlink(self):
+        """Toggle DeathLink on or off for this session."""
+        ctx: B3Context = self.ctx
+        if not ctx.death_link and not getattr(ctx.iface, "_deathlink_supported", False):
+            logger.info("[B3] DeathLink is not supported for this game version "
+                        "(HP addresses not mapped) — toggling anyway, but nothing will fire.")
+        ctx.death_link = not ctx.death_link
+        ctx._death_link_override = ctx.death_link
+        ctx._reset_deathlink_state()
+        async_start(ctx.update_death_link(ctx.death_link))
+        logger.info(f"[B3] DeathLink {'ENABLED' if ctx.death_link else 'DISABLED'} "
+                    f"(overrides the YAML setting until the client is restarted).")
 
     def _cmd_restore(self):
         """Remove the code cave and pause auto-reinstall. Use /cave to reinstall."""
@@ -93,6 +108,7 @@ class B3Context(CommonContext):
 
         # DeathLink state
         self.death_link: bool = False
+        self._death_link_override: Optional[bool] = None  # /deathlink wins over the YAML
         self._dl_pending_death: bool = False  # incoming death buffered to apply
         self._dl_caused: bool = False         # our loss was caused by incoming DL
         self._dl_killing: bool = False        # actively draining HP to kill self
@@ -100,14 +116,19 @@ class B3Context(CommonContext):
         self._dl_prev_end_hp: int = -1        # last fight_end_hp reading
         self._dl_loss_sent: bool = False      # already sent this fight's loss
         self._dl_win_lock: bool = False       # results-win seen -> no death this fight
+        self._dl_loss_pending: bool = False   # fight ended; win/loss not settled yet
+        self._dl_loss_deadline: float = 0.0   # when to commit an unsettled loss
+        self._dl_pending_caused: bool = False # the unsettled loss was our own doing
         # Arena-specific deathlink state (arena loss = return to list w/o results)
         self._dl_arena_live: bool = False     # saw arena battle (0x0619) this fight
+        self._dl_arena_away: int = 0          # consecutive polls spent outside the arena
         self._dl_arena_win: bool = False      # saw arena results (0x061A/B) this fight
         self._dl_prev_screen: int = -1        # last screen for transition detection
 
         # Shop state
         # The pool of capsules (from slot_data seed) — up to 50, shown 10 at a time
         self.shop_pool: list = []          # list of (display_idx, own_idx, name)
+        self._shop_pool_built: bool = False  # pool may legitimately be empty
         self.restocks_received: int = 0    # number of "Shop Restock" items received
         self.shop_purchased: set = set()   # pool indices already bought (by position)
         self.shop_checks_sent: set = set() # location names already sent
@@ -236,6 +257,24 @@ class B3Context(CommonContext):
         super().on_deathlink(data)
         self._dl_pending_death = True
 
+    def _reset_deathlink_state(self):
+        """Drop all per-fight DeathLink state. Used when toggling DeathLink so a
+        fight that was already in progress can't fire on the new setting."""
+        self._dl_pending_death = False
+        self._dl_caused = False
+        self._dl_killing = False
+        self._dl_fight_live = False
+        self._dl_prev_end_hp = -1
+        self._dl_loss_sent = False
+        self._dl_win_lock = False
+        self._dl_loss_pending = False
+        self._dl_loss_deadline = 0.0
+        self._dl_pending_caused = False
+        self._dl_prev_screen = -1
+        self._dl_arena_live = False
+        self._dl_arena_win = False
+        self._dl_arena_away = 0
+
     def _handle_deathlink(self):
         """Run every poll. Outgoing: detect our loss (fight-end HP cleared to 0
         while we stayed in DU battle, i.e. NOT the win results screen) and send a
@@ -251,8 +290,8 @@ class B3Context(CommonContext):
             screen = self.iface.get_screen()
         except Exception:
             return
-        in_battle = (screen == 0x0109)   # SCREEN_DU_BATTLE
-        on_win = (screen == 0x010A)      # SCREEN_RESULTS_WIN
+        in_battle = (screen == self.iface.screen_du_battle)
+        on_win = (screen == self.iface.screen_results_win)
 
         # ── Arena outgoing detection ─────────────────────────────────────────
         # Arena has clean, distinct screens (no in-place retry popup like DU):
@@ -260,16 +299,47 @@ class B3Context(CommonContext):
         #   straight back to 0x0618 (opponent list). So an arena loss is a real
         #   screen transition we can catch: we were in an arena battle, then
         #   returned to the list (or entrance) without ever hitting results.
-        arena_battle = (screen == 0x0619)        # SCREEN_DA_BATTLE
-        arena_results = screen in (0x061A, 0x061B)  # results / save (a WIN)
-        arena_list = screen in (0x0617, 0x0618)  # entrance / opponent list
+        arena_battle = (screen == self.iface.screen_da_battle)
+        arena_results = screen in self.iface.screen_da_results   # results / save (a WIN)
+        arena_list = screen in self.iface.screen_da_list         # entrance / opponent list
         prev_screen = self._dl_prev_screen
         self._dl_prev_screen = screen
+
+        in_arena = arena_battle or arena_results or arena_list
 
         if arena_battle:
             self._dl_arena_live = True
         if arena_results:
             self._dl_arena_win = True
+
+        # Bailing out of a live arena fight (quit to the main menu / back to
+        # DU) ends it without ever touching the list or results screen, so the
+        # block below never runs. That is still a loss — the same as walking
+        # out of a DU fight — and it has to be settled HERE, at the moment we
+        # leave. Left alone, _dl_arena_live stays set for the rest of the
+        # session and the next visit to the arena entrance reads as "back at
+        # the list after a battle", firing that death at a bewildering moment.
+        # Wait a few polls first, so a transition screen between the battle and
+        # the results can't be mistaken for quitting.
+        if self._dl_arena_live and not in_arena:
+            self._dl_arena_away += 1
+            if self._dl_arena_away >= DL_ARENA_AWAY_POLLS:
+                quit_out = not self._dl_arena_win and not self._dl_loss_sent
+                self._dl_arena_live = False
+                self._dl_arena_win = False
+                self._dl_arena_away = 0
+                if quit_out:
+                    self._dl_loss_sent = True
+                    if self._dl_caused:
+                        self._dl_caused = False      # suppress echo
+                    else:
+                        logger.debug(f"[B3] DeathLink: left a live arena fight "
+                                     f"(screen=0x{screen:04X}) -> sending death.")
+                        async_start(self.send_death(
+                            f"{self.player_names.get(self.slot, 'Player')} "
+                            f"abandoned a Dragon Arena fight."))
+        elif in_arena:
+            self._dl_arena_away = 0
         # Arena fight just ENDED if we were in arena battle last poll and now we
         # are not (and not loading into results). Decide win vs loss:
         if self._dl_arena_live and not arena_battle and (arena_list or arena_results):
@@ -281,6 +351,8 @@ class B3Context(CommonContext):
                 if self._dl_caused:
                     self._dl_caused = False
                 else:
+                    logger.debug(f"[B3] DeathLink: arena loss (screen=0x{screen:04X}, "
+                                 f"prev=0x{prev_screen:04X}) -> sending death.")
                     async_start(self.send_death(
                         f"{self.player_names.get(self.slot, 'Player')} lost in the Dragon Arena."))
             # reset arena per-fight state once we are back on the list
@@ -321,6 +393,12 @@ class B3Context(CommonContext):
             if not self._dl_killing:
                 self._dl_caused = False
 
+        # Win lockout: if we ever hit the win results screen this fight, no death
+        # may fire (mirrors BT2 victory-lock). Checked before anything can reset
+        # it, so it also cancels a loss still awaiting confirmation below.
+        if on_win:
+            self._dl_win_lock = True
+
         # Per-fight tracking. "Live" requires HP initialized, not just the screen.
         # Leaving the battle (and not on the win screen) resets for next fight.
         if truly_live:
@@ -332,25 +410,52 @@ class B3Context(CommonContext):
             self._dl_win_lock = False
             self._dl_killing = False
             self._dl_caused = False
-
-        # Win lockout: if we ever hit the win results screen this fight, no death
-        # may fire (mirrors BT2 victory-lock).
-        if on_win:
-            self._dl_win_lock = True
+            # NOTE: _dl_loss_pending is deliberately NOT cleared here — quitting
+            # to the map after a loss must still commit that death.
 
         # OUTGOING: a fresh transition of end_hp -> 0 AFTER the fight went live
-        # (so the load-window 0 doesn't count), while we did NOT see the win
-        # screen = our loss. Send once. Anti-chain: a loss we caused via an
-        # incoming DeathLink doesn't echo back out.
+        # (so the load-window 0 doesn't count) means the fight ENDED — it does
+        # NOT yet say whether we lost. The HP copy is cleared at the KO itself,
+        # while the win results screen (0x010A) only follows once the KO camera
+        # finishes, so on a win this poll can see the cleared HP before the win
+        # screen exists and report a death. Arm a pending loss instead and let
+        # the next screen settle it.
         fresh_end = (end_hp == 0 and prev_end not in (0, -1))
         if (self._dl_fight_live and fresh_end and not self._dl_win_lock
-                and not self._dl_loss_sent):
-            self._dl_loss_sent = True
-            if self._dl_caused:
-                self._dl_caused = False           # suppress echo
-            else:
-                async_start(self.send_death(
-                    f"{self.player_names.get(self.slot, 'Player')} was defeated in battle."))
+                and not self._dl_loss_sent and not self._dl_loss_pending):
+            self._dl_loss_pending = True
+            self._dl_loss_deadline = time.monotonic() + DL_LOSS_CONFIRM_SECS
+            # Snapshot the anti-chain flag now: the per-fight reset can clear
+            # _dl_caused before this loss is committed.
+            self._dl_pending_caused = self._dl_caused
+            self._dl_caused = False
+
+        if self._dl_loss_pending:
+            if self._dl_win_lock:
+                # The results screen turned up: we won after all.
+                self._dl_loss_pending = False
+                # Hand the anti-chain flag back; a kill we were handed is still
+                # in progress and its real loss must not echo out.
+                self._dl_caused = self._dl_caused or self._dl_pending_caused
+                self._dl_pending_caused = False
+                logger.debug("[B3] DeathLink: fight end resolved as a WIN, no death sent.")
+            elif new_attempt or time.monotonic() >= self._dl_loss_deadline:
+                if not new_attempt:
+                    logger.debug(f"[B3] DeathLink: no win screen within "
+                                 f"{DL_LOSS_CONFIRM_SECS}s (screen=0x{screen:04X}) "
+                                 f"-> treating fight end as a loss.")
+                # Retry/Continue started a fresh attempt, or the win screen
+                # never came — a real loss.
+                self._dl_loss_pending = False
+                # This loss belongs to the attempt that just ended. If a fresh
+                # attempt has already started (Retry), leave its own one-death
+                # guard clear so losing again still reports.
+                self._dl_loss_sent = not new_attempt
+                if self._dl_pending_caused:
+                    self._dl_pending_caused = False   # suppress echo
+                else:
+                    async_start(self.send_death(
+                        f"{self.player_names.get(self.slot, 'Player')} was defeated in battle."))
 
         # INCOMING: apply a buffered death once the fight is TRULY LIVE. For DU
         # that means the battle screen + HP initialized; for arena it means the
@@ -397,10 +502,19 @@ class B3Context(CommonContext):
         self.dragonsanity = bool(self.slot_data.get("dragonsanity", 0)) if self.slot_data else False
 
         # DeathLink
-        self.death_link = bool(self.slot_data.get("death_link", 0)) if self.slot_data else False
+        # A /deathlink toggle outranks the YAML, so reconnecting doesn't undo it.
+        if self._death_link_override is not None:
+            self.death_link = self._death_link_override
+        else:
+            self.death_link = bool(self.slot_data.get("death_link", 0)) if self.slot_data else False
         if self.death_link:
             async_start(self.update_death_link(True))
             logger.info("[B3] DeathLink enabled.")
+            ifc = self.iface
+            logger.info(f"[B3] DeathLink screens: battle=0x{ifc.screen_du_battle:04X} "
+                        f"win=0x{ifc.screen_results_win:04X} "
+                        f"arena_battle=0x{ifc.screen_da_battle:04X} "
+                        f"arena_results={[f'0x{v:04X}' for v in ifc.screen_da_results]}")
 
         if self.connected_to_game:
             logger.info("[B3] AP server connected — building matchups and installing cave...")
@@ -701,6 +815,7 @@ class B3Context(CommonContext):
         from .data.Constants import SHOP_CAPSULE_POOL
         shop_slots = self.slot_data.get("shop_slots", 50) if self.slot_data else 50
         self.shop_pool = list(SHOP_CAPSULE_POOL)[:shop_slots]
+        self._shop_pool_built = True
         logger.info(f"[B3] Shop pool built: {len(self.shop_pool)} capsules (fixed order)")
 
     def _visible_shop_entries(self):
@@ -808,8 +923,9 @@ class B3Context(CommonContext):
         # fresh full scan every poll, and (3) read the current count first and
         # only write when it actually exceeds the allowed value.
         prev_da_screen = getattr(self, "_prev_da_screen", -1)
-        if screen == 0x0618:
-            if prev_da_screen != 0x0618:
+        da_charsel = self.iface.screen_da_charsel
+        if screen == da_charsel:
+            if prev_da_screen != da_charsel:
                 # Just entered the list screen: invalidate cache ONCE so the next
                 # stable poll does a fresh lookup, and start the settle counter.
                 self.iface._da_count_cache = None
@@ -827,7 +943,7 @@ class B3Context(CommonContext):
 
         # Win detection — ONLY on results/save screens, never during the battle
         # load. Throttled to ~once per second (380 flag reads is expensive).
-        if screen in (0x061A, 0x061B):  # results or post-battle save
+        if screen in self.iface.screen_da_results:  # results or post-battle save
             self._da_scan_counter = getattr(self, "_da_scan_counter", 0) + 1
             if self._da_scan_counter >= 10:  # every ~1 second at 0.1s poll
                 self._da_scan_counter = 0
@@ -1145,7 +1261,7 @@ async def pcsx2_sync_task(ctx: B3Context):
                     # Build matchups only if already connected to AP server
                     if ctx.slot_data:
                         ctx._build_matchups()
-                        if not ctx.shop_pool:
+                        if not ctx._shop_pool_built:
                             ctx._build_shop_pool()
                         if not ctx.iface.any_fight_loading():
                             ctx.install_cave()
@@ -1215,6 +1331,24 @@ async def pcsx2_sync_task(ctx: B3Context):
                     logger.info(f"[B3] Locks reapplied on screen 0x{screen:04X}")
             ctx._prev_screen_locks = screen
 
+            # The fight cave serves Dragon Universe only, but its intercept is a
+            # permanent patch to a fight-load routine every mode runs through,
+            # and the game reuses the cave region itself (that is what the
+            # periodic "Cave missing, reinstalling" lines are). If the region is
+            # overwritten while the hook is still live, the next fight load
+            # jumps into whatever now lives there — an EE crash. So carry the
+            # hook only while actually in DU; the world-map check below puts it
+            # back on return. Reinstall is already gated to the DU world map.
+            if ctx.iface._cave_installed and not ctx.cave_paused:
+                try:
+                    in_du = (ctx.iface.get_mode() == DU_MODE)
+                except Exception:
+                    in_du = True          # unreadable: leave the hook alone
+                if not in_du:
+                    logger.info(f"[B3] Left Dragon Universe (screen=0x{screen:04X}) "
+                                f"— removing fight hook until we return.")
+                    ctx.iface.restore_original()
+
             # Poll for completed fights
             completed = ctx.iface.poll_completed_fights()
             for loc_name in completed:
@@ -1259,7 +1393,7 @@ async def pcsx2_sync_task(ctx: B3Context):
             # transition — the arena char-select re-initializes capsule display
             # bytes on entry, temporarily showing all characters as unlocked.
             _prev_arena_scr = getattr(ctx, "_prev_arena_charsel", False)
-            _on_arena_charsel = (ctx.iface.get_screen() == 0x0618)
+            _on_arena_charsel = (ctx.iface.get_screen() == ctx.iface.screen_da_charsel)
             if _on_arena_charsel and not _prev_arena_scr:
                 ctx.iface.apply_character_locks(ctx.unlocked_characters)
                 # Invalidate arena count cache so a fresh scan happens
@@ -1269,10 +1403,12 @@ async def pcsx2_sync_task(ctx: B3Context):
             # Handle shop — on transition TO the shop screen, immediately
             # write our stock/clear BEFORE _handle_shop runs to win the race
             # against the game's own shop-init routine.
-            if ctx.slot_data and not ctx.shop_pool:
+            if ctx.slot_data and not ctx._shop_pool_built:
                 ctx._build_shop_pool()
             _prev_shop_screen = getattr(ctx, "_prev_shop_screen", False)
-            _on_shop = ctx.iface.is_shop_open()
+            # With ShopSanity off (pool empty) leave the shop completely alone —
+            # clearing it would empty the vanilla shop the player still uses.
+            _on_shop = bool(ctx.shop_pool) and ctx.iface.is_shop_open()
             if _on_shop and not _prev_shop_screen:
                 # Transition: just entered shop screen. Fire immediately.
                 visible = ctx._visible_shop_entries()
