@@ -16,86 +16,180 @@ from .Locations import (
 # Format: character_name -> { saga_name -> [location names in that saga] }
 DU_CHARACTER_SAGAS = {
     "Goku": {
-        "Saiyan":  ["Goku DU - Raditz", "Goku DU - Nappa", "Goku DU - Vegeta"],
-        "Frieza":  ["Goku DU - Recoome", "Goku DU - Ginyu",
-                    "Goku DU - Frieza Final Form", "Goku DU - Frieza 100%"],
-        "Cell":    ["Goku DU - Perfect Cell"],
-        "Buu":     ["Goku DU - Majin Vegeta", "Goku DU - Majin Buu",
-                    "Goku DU - Vegito vs Buuhan", "Goku DU - Super Buu (Inside Buu)",
-                    "Goku DU - Kid Buu"],
+        "Saiyan": [
+            "Goku DU - Saiyan Saga - Ch.1 - Raditz",
+            "Goku DU - Saiyan Saga - Ch.2 - Nappa",
+            "Goku DU - Saiyan Saga - Ch.3 - Vegeta",
+        ],
+        "Frieza": [
+            "Goku DU - Frieza Saga - Ch.1 - Recoome",
+            "Goku DU - Frieza Saga - Ch.2 - Ginyu",
+            "Goku DU - Frieza Saga - Ch.3 - Frieza Final Form",
+            "Goku DU - Frieza Saga - Ch.4 - Frieza 100%",
+        ],
+        "Cell": [
+            "Goku DU - Cell Saga - Ch.1 - Perfect Cell",
+        ],
+        "Buu": [
+            "Goku DU - Buu Saga - Ch.1 - Majin Vegeta",
+            "Goku DU - Buu Saga - Ch.1 - Majin Buu",
+            "Goku DU - Buu Saga - Ch.1 - Vegito vs Buuhan",
+            "Goku DU - Buu Saga - Ch.1 - Super Buu (Inside Buu)",
+            "Goku DU - Buu Saga - Ch.1 - Kid Buu",
+        ],
     },
     "Kid Gohan": {
-        "Saiyan":  ["Kid Gohan DU - Piccolo", "Kid Gohan DU - Saibaman",
-                    "Kid Gohan DU - Nappa"],
-        "Frieza":  ["Kid Gohan DU - Recoome", "Kid Gohan DU - Frieza 3rd Form"],
+        "Saiyan": [
+            "Kid Gohan DU - Saiyan Saga - Ch.1 - Piccolo",
+            "Kid Gohan DU - Saiyan Saga - Ch.2 - Saibaman",
+            "Kid Gohan DU - Saiyan Saga - Ch.3 - Nappa",
+        ],
+        "Frieza": [
+            "Kid Gohan DU - Frieza Saga - Ch.1 - Recoome",
+            "Kid Gohan DU - Frieza Saga - Ch.2 - Frieza 3rd Form",
+        ],
     },
     "Teen Gohan": {
-        "Cell":    ["Teen Gohan DU - Piccolo", "Teen Gohan DU - Krillin",
-                    "Teen Gohan DU - Goku", "Teen Gohan DU - Perfect Cell",
-                    "Teen Gohan DU - Super Perfect Cell"],
+        "Cell": [
+            "Teen Gohan DU - Cell Saga - Ch.1 - Piccolo",
+            "Teen Gohan DU - Cell Saga - Ch.2 - Krillin",
+            "Teen Gohan DU - Cell Saga - Ch.2 - Goku",
+            "Teen Gohan DU - Cell Saga - Ch.2 - Perfect Cell",
+            "Teen Gohan DU - Cell Saga - Ch.2 - Super Perfect Cell",
+        ],
     },
     "Adult Gohan": {
-        "Buu":     ["Adult Gohan DU - Goten", "Adult Gohan DU - Videl",
-                    "Adult Gohan DU - Dabura", "Adult Gohan DU - Majin Buu",
-                    "Adult Gohan DU - Super Buu"],
+        "Buu": [
+            "Adult Gohan DU - Buu Saga - Ch.1 - Goten",
+            "Adult Gohan DU - Buu Saga - Ch.2 - Videl",
+            "Adult Gohan DU - Buu Saga - Ch.2 - Dabura",
+            "Adult Gohan DU - Buu Saga - Ch.3 - Majin Buu",
+            "Adult Gohan DU - Buu Saga - Ch.3 - Super Buu",
+        ],
     },
     "Vegeta": {
-        "Saiyan":  ["Vegeta DU - Goku", "Vegeta DU - Kid Gohan"],
-        "Frieza":  ["Vegeta DU - Recoome", "Vegeta DU - Frieza 1st Form",
-                    "Vegeta DU - Frieza Final Form", "Vegeta DU - Cooler"],
-        "Cell":    ["Vegeta DU - Android 17", "Vegeta DU - Android 18",
-                    "Vegeta DU - Semi-Perfect Cell", "Vegeta DU - Perfect Cell"],
-        "Buu":     ["Vegeta DU - Goku (SS2)", "Vegeta DU - Majin Buu",
-                    "Vegeta DU - Super Buu (Gohan Absorbed)",
-                    "Vegeta DU - Super Buu (Gohan Absorbed) [Supreme Kai]",
-                    "Vegeta DU - Super Buu (Inside Buu)",
-                    "Vegeta DU - Super Buu (Inside Buu) [Supreme Kai]",
-                    "Vegeta DU - Kid Buu", "Vegeta DU - Broly",
-                    "Vegeta DU - Broly [Goku Friendship]",
-                    "Vegeta DU - Gotenks (SS)", "Vegeta DU - Goku (SS4)"],
+        "Saiyan": [
+            "Vegeta DU - Saiyan Saga - Ch.1 - Goku",
+            "Vegeta DU - Saiyan Saga - Ch.2 - Kid Gohan",
+        ],
+        "Frieza": [
+            "Vegeta DU - Frieza Saga - Ch.1 - Recoome",
+            "Vegeta DU - Frieza Saga - Ch.2 - Frieza 1st Form",
+            "Vegeta DU - Frieza Saga - Ch.3 - Frieza Final Form",
+            "Vegeta DU - Frieza Saga - Ch.3 - Cooler",
+        ],
+        "Cell": [
+            "Vegeta DU - Cell Saga - Ch.1 - Android 17",
+            "Vegeta DU - Cell Saga - Ch.1 - Android 18",
+            "Vegeta DU - Cell Saga - Ch.2 - Semi-Perfect Cell",
+            "Vegeta DU - Cell Saga - Ch.3 - Perfect Cell",
+        ],
+        "Buu": [
+            "Vegeta DU - Buu Saga - Ch.1 - Goku (SS2)",
+            "Vegeta DU - Buu Saga - Ch.1 - Majin Buu",
+            "Vegeta DU - Buu Saga - Ch.2 - Super Buu (Gohan Absorbed)",
+            "Vegeta DU - Buu Saga - Ch.2 - Super Buu (Gohan Absorbed) [Supreme Kai]",
+            "Vegeta DU - Buu Saga - Ch.2 - Super Buu (Inside Buu)",
+            "Vegeta DU - Buu Saga - Ch.2 - Super Buu (Inside Buu) [Supreme Kai]",
+            "Vegeta DU - Buu Saga - Ch.2 - Kid Buu",
+            "Vegeta DU - Buu Saga - Ch.2 - Broly",
+            "Vegeta DU - Buu Saga - Ch.2 - Broly [Goku Friendship]",
+            "Vegeta DU - Buu Saga - Ch.3 - Gotenks (SS)",
+            "Vegeta DU - Buu Saga - Ch.3 - Goku (SS4)",
+        ],
     },
     "Krillin": {
-        "Saiyan":  ["Krillin DU - Nappa", "Krillin DU - Saibaman"],
-        "Frieza":  ["Krillin DU - Recoome", "Krillin DU - Ginyu as Goku",
-                    "Krillin DU - Frieza 2nd Form", "Krillin DU - Frieza Final Form",
-                    "Krillin DU - Frieza Final Form (Ginyu)"],
-        "Cell":    ["Krillin DU - Perfect Cell"],
+        "Saiyan": [
+            "Krillin DU - Saiyan Saga - Ch.2 - Nappa",
+            "Krillin DU - Saiyan Saga - Ch.1 - Saibaman",
+        ],
+        "Frieza": [
+            "Krillin DU - Frieza Saga - Ch.1 - Recoome",
+            "Krillin DU - Frieza Saga - Ch.2 - Ginyu as Goku",
+            "Krillin DU - Frieza Saga - Ch.3 - Frieza 2nd Form",
+            "Krillin DU - Frieza Saga - Ch.4 - Frieza Final Form",
+            "Krillin DU - Frieza Saga - Ch.4 - Frieza Final Form (Ginyu)",
+        ],
+        "Cell": [
+            "Krillin DU - Cell Saga - Ch.1 - Perfect Cell",
+        ],
     },
     "Piccolo": {
-        "Saiyan":  ["Piccolo DU - Raditz (SBC)", "Piccolo DU - Kid Gohan",
-                    "Piccolo DU - Saibamen", "Piccolo DU - Goku",
-                    "Piccolo DU - Nappa", "Piccolo DU - Vegeta",
-                    "Piccolo DU - Raditz (Kame House)"],
-        "Frieza":  ["Piccolo DU - Frieza 2nd Form", "Piccolo DU - Frieza 3rd Form",
-                    "Piccolo DU - Frieza Final Form", "Piccolo DU - Cooler",
-                    "Piccolo DU - Metal Cooler"],
-        "Cell":    ["Piccolo DU - Dr. Gero", "Piccolo DU - Imperfect Cell",
-                    "Piccolo DU - Imperfect Cell (Baba)", "Piccolo DU - Perfect Cell",
-                    "Piccolo DU - Android 17"],
-        "Buu":     ["Piccolo DU - Dabura", "Piccolo DU - Super Buu",
-                    "Piccolo DU - Broly"],
+        "Saiyan": [
+            "Piccolo DU - Saiyan Saga - Ch.1 - Raditz (SBC)",
+            "Piccolo DU - Saiyan Saga - Ch.2 - Kid Gohan",
+            "Piccolo DU - Saiyan Saga - Ch.3 - Saibamen",
+            "Piccolo DU - Saiyan Saga - Ch.2 - Goku",
+            "Piccolo DU - Saiyan Saga - Ch.4 - Nappa",
+            "Piccolo DU - Saiyan Saga - Ch.3 - Vegeta",
+            "Piccolo DU - Saiyan Saga - Ch.1 - Raditz (Kame House)",
+        ],
+        "Frieza": [
+            "Piccolo DU - Frieza Saga - Ch.1 - Frieza 2nd Form",
+            "Piccolo DU - Frieza Saga - Ch.2 - Frieza 3rd Form",
+            "Piccolo DU - Frieza Saga - Ch.2 - Frieza Final Form",
+            "Piccolo DU - Frieza Saga - Ch.2 - Cooler",
+            "Piccolo DU - Frieza Saga - Ch.3 - Metal Cooler",
+        ],
+        "Cell": [
+            "Piccolo DU - Cell Saga - Ch.1 - Dr. Gero",
+            "Piccolo DU - Cell Saga - Ch.2 - Imperfect Cell",
+            "Piccolo DU - Cell Saga - Ch.2 - Imperfect Cell (Baba)",
+            "Piccolo DU - Cell Saga - Ch.3 - Perfect Cell",
+            "Piccolo DU - Cell Saga - Ch.3 - Android 17",
+        ],
+        "Buu": [
+            "Piccolo DU - Buu Saga - Ch.1 - Dabura",
+            "Piccolo DU - Buu Saga - Ch.1 - Super Buu",
+            "Piccolo DU - Buu Saga - Ch.2 - Broly",
+        ],
     },
     "Tien": {
-        "Saiyan":  ["Tien DU - Saibamen", "Tien DU - Nappa"],
-        "Cell":    ["Tien DU - Semi-Perfect Cell", "Tien DU - Cell Jr."],
-        "Buu":     ["Tien DU - Super Buu (Gotenks)", "Tien DU - Super Buu (Gotenks/Chiaotzu)",
-                    "Tien DU - Yamcha"],
+        "Saiyan": [
+            "Tien DU - Saiyan Saga - Ch.1 - Saibamen",
+            "Tien DU - Saiyan Saga - Ch.2 - Nappa",
+        ],
+        "Cell": [
+            "Tien DU - Cell Saga - Ch.1 - Semi-Perfect Cell",
+            "Tien DU - Cell Saga - Ch.2 - Cell Jr.",
+        ],
+        "Buu": [
+            "Tien DU - Buu Saga - Ch.1 - Super Buu (Gotenks)",
+            "Tien DU - Buu Saga - Ch.1 - Super Buu (Gotenks/Chiaotzu)",
+            "Tien DU - Buu Saga - Ch.2 - Yamcha",
+        ],
     },
     "Yamcha": {
-        "Saiyan":  ["Yamcha DU - Saibamen"],
-        "Cell":    ["Yamcha DU - Dr. Gero"],
-        "Buu":     ["Yamcha DU - Tien", "Yamcha DU - Vegeta"],
+        "Saiyan": [
+            "Yamcha DU - Saiyan Saga - Ch.1 - Saibamen",
+        ],
+        "Cell": [
+            "Yamcha DU - Cell Saga - Ch.1 - Dr. Gero",
+        ],
+        "Buu": [
+            "Yamcha DU - Buu Saga - Ch.1 - Tien",
+            "Yamcha DU - Buu Saga - Ch.1 - Vegeta",
+        ],
     },
     "Uub": {
-        "Buu":     ["Uub DU - Goku (WT)", "Uub DU - Majin Buu",
-                    "Uub DU - Vegeta & Goku", "Uub DU - Goku (Roshi)",
-                    "Uub DU - Omega Shenron"],
+        "Buu": [
+            "Uub DU - Buu Saga - Ch.1 - Goku (WT)",
+            "Uub DU - Buu Saga - Ch.2 - Majin Buu",
+            "Uub DU - Buu Saga - Ch.2 - Vegeta & Goku",
+            "Uub DU - Buu Saga - Ch.3 - Goku (Roshi)",
+            "Uub DU - Buu Saga - Ch.4 - Omega Shenron",
+        ],
     },
     "Broly": {
-        "Buu":     ["Broly DU - Videl", "Broly DU - Kid Trunks",
-                    "Broly DU - Goten", "Broly DU - Gohan",
-                    "Broly DU - Gohan (WT post-game)", "Broly DU - Gohan (Rematch)",
-                    "Broly DU - Goku"],
+        "Buu": [
+            "Broly DU - Buu Saga - Ch.1 - Videl",
+            "Broly DU - Buu Saga - Ch.1 - Kid Trunks",
+            "Broly DU - Buu Saga - Ch.1 - Goten",
+            "Broly DU - Buu Saga - Ch.1 - Gohan",
+            "Broly DU - Buu Saga - Ch.1 - Gohan (WT post-game)",
+            "Broly DU - Buu Saga - Ch.1 - Gohan (Rematch)",
+            "Broly DU - Buu Saga - Ch.1 - Goku",
+        ],
     },
 }
 
@@ -103,31 +197,62 @@ DU_CHARACTER_SAGAS = {
 # Extra fights that are only locations with the map helper on (same layout).
 DU_CHARACTER_SAGAS_MAP_HELPER = {
     "Goku": {
-        "Saiyan":  ["Goku DU - Tien (World Tournament)"],
-        "Frieza":  ["Goku DU - Cooler", "Goku DU - Vegeta (Namek)", "Goku DU - Metal Cooler",
-                    "Goku DU - Cooler (Rematch)", "Goku DU - Frieza Final Form (Cooler Route)"],
-        "Buu":     ["Goku DU - Uub", "Goku DU - Broly", "Goku DU - Gotenks (as Gogeta)",
-                    "Goku DU - Omega Shenron", "Goku DU - Vegito vs Buuhan (2nd Route)",
-                    "Goku DU - Super Buu (Inside Buu) (2nd Route)",
-                    "Goku DU - Gotenks (as Gogeta) (Ending)"],
+        "Saiyan": [
+            "Goku DU - Saiyan Saga - Ch.1 - Tien (World Tournament)",
+        ],
+        "Frieza": [
+            "Goku DU - Frieza Saga - Ch.4 - Cooler",
+            "Goku DU - Frieza Saga - Ch.4 - Vegeta (Namek)",
+            "Goku DU - Frieza Saga - Ch.5 - Metal Cooler",
+            "Goku DU - Frieza Saga - Ch.5 - Cooler (Rematch)",
+            "Goku DU - Frieza Saga - Ch.3 - Frieza Final Form (Cooler Route)",
+        ],
+        "Buu": [
+            "Goku DU - Buu Saga - Ch.1 - Uub",
+            "Goku DU - Buu Saga - Ch.1 - Broly",
+            "Goku DU - Buu Saga - Ch.2 - Gotenks (as Gogeta)",
+            "Goku DU - Buu Saga - Ch.2 - Omega Shenron",
+            "Goku DU - Buu Saga - Ch.1 - Vegito vs Buuhan (2nd Route)",
+            "Goku DU - Buu Saga - Ch.1 - Super Buu (Inside Buu) (2nd Route)",
+            "Goku DU - Buu Saga - Ch.2 - Gotenks (as Gogeta) (Ending)",
+        ],
     },
     "Kid Gohan": {
-        "Saiyan":  ["Kid Gohan DU - Goku", "Kid Gohan DU - Saibaman (2nd Route)"],
-        "Frieza":  ["Kid Gohan DU - Goku (Namek)", "Kid Gohan DU - Cooler"],
+        "Saiyan": [
+            "Kid Gohan DU - Saiyan Saga - Ch.1 - Goku",
+            "Kid Gohan DU - Saiyan Saga - Ch.2 - Saibaman (2nd Route)",
+        ],
+        "Frieza": [
+            "Kid Gohan DU - Frieza Saga - Ch.2 - Goku (Namek)",
+            "Kid Gohan DU - Frieza Saga - Ch.3 - Cooler",
+        ],
     },
     "Teen Gohan": {
-        "Cell":    ["Teen Gohan DU - Tien", "Teen Gohan DU - Yamcha"],
+        "Cell": [
+            "Teen Gohan DU - Cell Saga - Ch.2 - Tien",
+            "Teen Gohan DU - Cell Saga - Ch.2 - Yamcha",
+        ],
     },
     "Adult Gohan": {
-        "Buu":     ["Adult Gohan DU - Vegeta", "Adult Gohan DU - Piccolo",
-                    "Adult Gohan DU - Dabura (2nd Route)", "Adult Gohan DU - Majin Vegeta",
-                    "Adult Gohan DU - Kid Buu", "Adult Gohan DU - Broly"],
+        "Buu": [
+            "Adult Gohan DU - Buu Saga - Ch.2 - Vegeta",
+            "Adult Gohan DU - Buu Saga - Ch.2 - Piccolo",
+            "Adult Gohan DU - Buu Saga - Ch.2 - Dabura (2nd Route)",
+            "Adult Gohan DU - Buu Saga - Ch.3 - Majin Vegeta",
+            "Adult Gohan DU - Buu Saga - Ch.4 - Kid Buu",
+            "Adult Gohan DU - Buu Saga - Ch.5 - Broly",
+        ],
     },
     "Vegeta": {
-        "Buu":     ["Vegeta DU - Adult Gohan", "Vegeta DU - Piccolo"],
+        "Buu": [
+            "Vegeta DU - Buu Saga - Ch.1 - Adult Gohan",
+            "Vegeta DU - Buu Saga - Ch.1 - Piccolo",
+        ],
     },
     "Yamcha": {
-        "Saiyan":  ["Yamcha DU - Saibamen (2nd Route)"],
+        "Saiyan": [
+            "Yamcha DU - Saiyan Saga - Ch.1 - Saibamen (2nd Route)",
+        ],
     },
 }
 

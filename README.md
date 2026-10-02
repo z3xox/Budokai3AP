@@ -57,7 +57,7 @@ With `map_helper` on, the Dragon Universe map shows everything the current chapt
 - Winning the story's last fight no longer ends the Dragon Universe either: a **white** marker appears that plays the ending when you want to finish.
 - Requirements from a second playthrough are removed, so every route's fights are on the map.
 - `/map` in the client shows its state; `/map off` and `/map on` switch it for the session.
-- Works on Greatest Hits (CRC `c97ef0a4`) and Black Label (CRC `2a4b60eb`). Black Label has no Cooler-route Frieza fight for Goku; that check is sent together with `Goku DU - Frieza Final Form`.
+- Works on Greatest Hits (CRC `c97ef0a4`) and Black Label (CRC `2a4b60eb`). Black Label has no Cooler-route Frieza fight for Goku; that check is sent together with `Goku DU - Frieza Saga - Ch.3 - Frieza Final Form`.
 
 ## Checks
 - **DU fights (100, or 128 with `map_helper`)** — win a fight = a check (Goku, Vegeta, Piccolo, Krillin, Tien, Broly, the Gohans, Uub, Yamcha)
