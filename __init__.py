@@ -249,6 +249,7 @@ class B3World(World):
             "map_helper":              self.options.map_helper.value,
             "map_free_travel":         self.options.map_free_travel.value,
             "map_item_labels":         self.options.map_item_labels.value,
+            "shop_item_labels":        self.options.shop_item_labels.value,
             "saga_locks":              self.options.saga_locks.value,
             "interactsanity":          self.options.interactsanity.value,
             "fighter_unlocks":         self.options.fighter_unlocks.value,

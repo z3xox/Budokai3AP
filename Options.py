@@ -183,6 +183,13 @@ class MapItemLabels(DefaultOnToggle):
     display_name = "Map Item Labels"
 
 
+class ShopItemLabels(DefaultOnToggle):
+    """The Skill Shop's list shows the Archipelago item each capsule sends, and
+    who it is for, in place of the capsule's own name (same colours as the map
+    labels). OFF: the capsules keep their names. NTSC-U only."""
+    display_name = "Shop Item Labels"
+
+
 class SagaLocks(Toggle):
     """Lock the Frieza, Cell and Buu sagas behind 'Saga Unlock' items. A character
     can only move on to a saga once its item is found; the saga a character's story
@@ -270,6 +277,7 @@ class B3Options(PerGameCommonOptions):
     map_helper: MapHelper
     map_free_travel: MapFreeTravel
     map_item_labels: MapItemLabels
+    shop_item_labels: ShopItemLabels
     saga_locks: SagaLocks
     interactsanity: Interactsanity
     fighter_unlocks: FighterUnlocks

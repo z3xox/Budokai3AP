@@ -1337,3 +1337,19 @@ MAP_DOT_TEXTURE   = 2            # the dot's texture in the HUD sheet; its palet
 MAP_DOT_PALETTE   = [0x7A01015C, 0x7002035C, 0x6A000163, 0x6803045D, 0x63070758, 0x58030364,
                      0x5206075D, 0x4000016D, 0x30040469, 0x8004046E, 0x0D000079, 0x09000178,
                      0x0000007C, 0x800F0FAE, 0x801718E4, 0x801C1DFE]
+
+
+# ─── Loaded files (NTSC-U) ───────────────────────────────────────────────────
+# The game keeps a table of the files it has loaded from the AFS archives, at a
+# fixed place. An entry in use has 1 in the word before its file number; from
+# the file number: +0x10 where the file is in memory, +0x14 its state. A file
+# is loaded somewhere else every time, and old copies are left behind, so this
+# table is the way to find the live one.
+ADDR_FILE_TABLE    = 0x00599200
+FILE_TABLE_END     = 0x0059C200
+FILE_ENTRY_POINTER = 0x10
+FILE_ENTRY_STATE   = 0x14
+FILE_LOADED        = 3
+# DATA_USA files holding the capsule names as images (image number = capsule
+# display id): the Skill Shop's list uses one, its highlighted row the other.
+SHOP_NAME_FILES    = (0xA67, 0xA7C)

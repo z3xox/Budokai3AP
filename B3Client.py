@@ -23,6 +23,7 @@ from NetUtils import NetworkItem, ClientStatus
 
 from .B3Interface import B3Interface, build_cave
 from .B3MapHelper import MapHelper
+from .B3ShopLabels import ShopLabels
 from .data.MapLocations import INTERACT_BY_EVENT
 from .data.Constants import (
     FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS, DL_LOSS_CONFIRM_SECS,
@@ -126,6 +127,8 @@ class B3Context(CommonContext):
 
         # Item names shown in the game (map hover labels, shop list)
         self.item_texts: dict = {}           # location name -> (item, " (player)", importance)
+        self.shop_labels = ShopLabels(self.iface.pine, logger)
+        self._shop_labels_open: bool = False
 
         # Fighter Unlocks: labels of the "Fighter: X" items received
         self.unlocked_fighters: set = set()
@@ -783,6 +786,29 @@ class B3Context(CommonContext):
                           else "useful" if item.flags & 0b010 else "filler")
             labels[loc_name] = (item_name, player, importance)
         self.item_texts = labels
+
+    def _service_shop_labels(self, on_shop: bool):
+        """Show the Archipelago items in the Skill Shop's list (see B3ShopLabels)."""
+        labels = self.shop_labels
+        wanted = bool(self.slot_data and self.slot_data.get("shop_item_labels", 1)
+                      and MapHelper.supported(getattr(self.iface, "_crc", "")))
+        if not (wanted and on_shop):
+            if self._shop_labels_open:
+                self._shop_labels_open = False
+                labels.close()
+            return
+        self._shop_labels_open = True
+        on_sale = []
+        for _, (display, _own, name) in self._visible_shop_entries():
+            text = self.item_texts.get(f"Shop: {name}")
+            if text:
+                on_sale.append((display, *text))
+        try:
+            labels.update(on_sale, {entry[0] for entry in self.shop_pool})
+        except ConnectionError:
+            raise
+        except Exception as e:
+            logger.debug(f"[B3] shop labels error: {e}")
 
     def _resend_interact_checks(self):
         """Send every Interactsanity check the helper remembers as visited: covers
@@ -1628,6 +1654,7 @@ async def pcsx2_sync_task(ctx: B3Context):
                     ctx.iface.clear_shop()
             ctx._prev_shop_screen = _on_shop
             ctx._handle_shop()
+            ctx._service_shop_labels(_on_shop)
 
             # Handle Dragon Arena
             ctx._handle_dragon_arena()
