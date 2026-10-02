@@ -7,6 +7,7 @@ Usage:
   python B3Client.py --connect archipelago.gg:38281 --password mypass
 """
 import asyncio
+import json
 import time
 import traceback
 import random
@@ -118,6 +119,11 @@ class B3Context(CommonContext):
         self.db_checks_sent: set = set()     # "char#bit" already sent
         self.wish_checks_sent: set = set()   # char already wished
 
+        # Experience items: how much of what was received has been given to a
+        # character so far (kept on disk per seed and slot, so nothing is given twice)
+        self._exp_state_path: Optional[str] = None
+        self._exp_applied: Optional[int] = None
+
         # Item names shown in the game (map hover labels, shop list)
         self.item_texts: dict = {}           # location name -> (item, " (player)", importance)
 
@@ -203,6 +209,16 @@ class B3Context(CommonContext):
             from .Locations import DU_COMPLETION_LOCATIONS
             done_ids = set(DU_COMPLETION_LOCATIONS.values())
             return sum(1 for loc in self.checked_locations if loc in done_ids)
+        except Exception:
+            return 0
+
+    def count_experience(self) -> int:
+        """Total experience received as items (counted from items_received, so it
+        is the same after a reconnect)."""
+        try:
+            from .Items import EXPERIENCE_AMOUNTS
+            return sum(EXPERIENCE_AMOUNTS.get(self.item_names.lookup_in_game(it.item), 0)
+                       for it in self.items_received)
         except Exception:
             return 0
 
@@ -532,6 +548,16 @@ class B3Context(CommonContext):
         self.map_helper.load_state(Utils.user_path(
             "b3_map_helper", f"{sd.get('seed', 'seed')}_{self.slot}.json"))
         self._resend_interact_checks()
+
+        # Experience items already given out in earlier sessions
+        self._exp_state_path = Utils.user_path(
+            "b3_map_helper", f"{sd.get('seed', 'seed')}_{self.slot}_experience.json")
+        try:
+            with open(self._exp_state_path) as fh:
+                self._exp_applied = int(json.load(fh).get("applied", 0))
+        except Exception:
+            self._exp_applied = 0
+
         # DeathLink
         # A /deathlink toggle outranks the YAML, so reconnecting doesn't undo it.
         if self._death_link_override is not None:
@@ -632,12 +658,47 @@ class B3Context(CommonContext):
             amounts = {"Zenie x500": 500, "Zenie x1000": 1000, "Zenie x2000": 2000}
             self.iface.write_zenie(amounts.get(name, 0))
 
+        elif name.startswith("Experience"):
+            # Given out by _service_experience (to the character being played).
+            logger.info(f"[B3] {name} received — it goes to the Dragon Universe "
+                        f"character you are playing (or play next).")
+
         elif name == "HP Drain Trap":
             # No per-item increment (that would re-queue every trap on reconnect
             # when items replay). The pending count is derived: total HP Drain
             # Traps received minus how many we've already applied to fights. See
             # _service_drain_trap.
             logger.info("[B3] HP Drain Trap received! Will apply to next fight.")
+
+    # ── Experience items ──────────────────────────────────────────────────────
+
+    def _service_experience(self):
+        """Give received Experience to the Dragon Universe character being played.
+        Done on the world map only, and held back while that character is at the
+        level cap so it goes to the next one played instead."""
+        if self._exp_applied is None:
+            return
+        pending = self.count_experience() - self._exp_applied
+        if pending <= 0:
+            return
+        from .data.Constants import SCREEN_WORLD_MAP
+        if not self.iface.in_du() or self.iface.get_screen() != SCREEN_WORLD_MAP:
+            return
+        char = self.iface.get_active_du_char_name()
+        if not char or not 1 <= self.iface.get_du_level(char) < 99:
+            return
+        if not self.iface.add_du_experience(char, pending):
+            return
+        self._exp_applied += pending
+        try:
+            import os
+            os.makedirs(os.path.dirname(self._exp_state_path), exist_ok=True)
+            with open(self._exp_state_path, "w") as fh:
+                json.dump({"applied": self._exp_applied}, fh)
+        except Exception as e:
+            logger.debug(f"[B3] could not save experience state: {e}")
+        logger.info(f"[B3] {pending} experience given to {char} — "
+                    f"the level-ups come with the next fight you win.")
 
     # ── Map helper ────────────────────────────────────────────────────────────
 
@@ -1490,6 +1551,9 @@ async def pcsx2_sync_task(ctx: B3Context):
 
             # HP Drain Trap: apply a received trap to the next fight
             ctx._service_drain_trap()
+
+            # Experience items: give what was received to the character being played
+            ctx._service_experience()
 
             # Start with Dragon Radar: grant the radar to the active DU character
             if ctx.slot_data and ctx.slot_data.get("start_with_dragon_radar", 1):

@@ -39,6 +39,16 @@ CAPSULE_ITEMS.update({
     "Zenie x2000":  B3_BASE_ID + 0x112 + 0xA0,
 })
 
+# ─── Experience (filler) ──────────────────────────────────────────────────────
+# Added to the Dragon Universe character being played when it arrives. The game
+# turns it into level-ups (with the usual stat choice) on the next fight won.
+EXPERIENCE_ITEMS = {
+    "Experience x1000":  B3_BASE_ID + 0x340,
+    "Experience x2500":  B3_BASE_ID + 0x341,
+    "Experience x5000":  B3_BASE_ID + 0x342,
+}
+EXPERIENCE_AMOUNTS = {"Experience x1000": 1000, "Experience x2500": 2500, "Experience x5000": 5000}
+
 # ─── Trap Items ───────────────────────────────────────────────────────────────
 
 TRAP_ITEMS = {
@@ -92,6 +102,7 @@ ITEM_CAPSULE_ITEMS = {
 item_table = {}
 item_table.update(CHARACTER_ITEMS)
 item_table.update(CAPSULE_ITEMS)
+item_table.update(EXPERIENCE_ITEMS)
 item_table.update(TRAP_ITEMS)
 item_table.update(SPECIAL_ITEMS)
 item_table.update(SAGA_UNLOCK_ITEMS)

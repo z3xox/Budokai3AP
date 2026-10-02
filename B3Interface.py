@@ -38,7 +38,7 @@ from .data.Constants import (
     DA_TICKET_DISPLAY, DA_TICKET_OWNERSHIP, DA_TICKET_DU_RT,
     ADDR_DA_OPP_COUNT, ADDR_DA_CLEAR_BASE, DA_FIGHT_COUNT,
     DRAGON_BALL_ADDRS, SCREEN_SHENRON,
-    OFFSET_BATTLE, OFFSET_SAGA, OFFSET_BATTLE_COMP,
+    OFFSET_BATTLE, OFFSET_SAGA, OFFSET_BATTLE_COMP, OFFSET_LEVEL, OFFSET_EXP,
     SCREEN_SHOP, SCREEN_WORLD_MAP, SCREEN_DU_BATTLE,
     SCREEN_RESULTS_WIN, SCREEN_SHENRON,
     SCREEN_DU_TITLE, SCREEN_DU_CHARSEL,
@@ -1039,6 +1039,25 @@ class B3Interface:
         rt_shift    = RT_CAPS_BASE - NTSC_RT_CAPS_BASE
         self.pine.write8(du_rt + du_rt_shift, 0x01)
         self.pine.write8(rt + rt_shift, 0x01)
+
+    def get_du_level(self, char_name: str) -> int:
+        """A character's Dragon Universe level (1-99), or -1 if unknown."""
+        if char_name not in DU_BASES:
+            return -1
+        try:
+            return self.pine.read8(DU_BASES[char_name]["base"] + OFFSET_LEVEL)
+        except Exception:
+            return -1
+
+    def add_du_experience(self, char_name: str, amount: int) -> bool:
+        """Add to a character's total Dragon Universe experience. The game does
+        not react straight away: on the next fight won, its experience screen
+        gives every level-up the new total is worth, each with its stat point."""
+        if char_name not in DU_BASES or amount <= 0:
+            return False
+        addr = DU_BASES[char_name]["base"] + OFFSET_EXP
+        self.pine.write32(addr, (self.pine.read32(addr) + amount) & 0xFFFFFFFF)
+        return True
 
     def read_dragon_ball_byte(self, char_name: str) -> int:
         """Read a character's Dragon Ball collection bitfield (bits 0-6)."""

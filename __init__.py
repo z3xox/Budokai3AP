@@ -115,6 +115,10 @@ class B3World(World):
 
         zenie_names = [n for n in CAPSULE_ITEMS.keys() if n.startswith("Zenie")]
         trap_names  = list(TRAP_ITEMS.keys()) if self.options.drain_trap else []
+        # Experience shares the generic filler with Zenie: unlike capsules it never
+        # runs out of use (eleven characters, level cap 99).
+        from .Items import EXPERIENCE_ITEMS
+        exp_names   = list(EXPERIENCE_ITEMS.keys())
         # Item capsules add flavorful variety instead of monotonous Zenie. Each
         # capsule can appear at most once (they're unique unlocks), so draw them
         # WITHOUT replacement; fall back to Zenie once they run out.
@@ -129,7 +133,8 @@ class B3World(World):
         extra_skill_copies = list(skill_names)
         self.random.shuffle(extra_skill_copies)
 
-        filler_cycle = zenie_names + trap_names
+        # Zenie and Experience alternate, so they stay even however short the cycle is cut.
+        filler_cycle = [n for pair in zip(zenie_names, exp_names) for n in pair] + trap_names
         if not filler_cycle:
             filler_cycle = zenie_names or ["Zenie x500"]
 
