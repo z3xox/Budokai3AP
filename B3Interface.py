@@ -639,6 +639,20 @@ class B3Interface:
             "da_ticket_display":    "DA_TICKET_DISPLAY",
             "da_ticket_ownership":  "DA_TICKET_OWNERSHIP",
             "da_ticket_du_rt":      "DA_TICKET_DU_RT",
+            "da_menu_flag":         "DA_MENU_FLAG",
+            "addr_system_task":     "ADDR_SYSTEM_TASK",
+            "addr_menu_manager":    "ADDR_MENU_MANAGER",
+            "addr_menu_closed":     "ADDR_MENU_CLOSED",
+            "addr_menu_faded":      "ADDR_MENU_FADED",
+            "addr_menu_target":     "ADDR_MENU_TARGET",
+            "addr_menu_next":       "ADDR_MENU_NEXT",
+            "menu_step_idle":       "MENU_STEP_IDLE",
+            "menu_step_picked":     "MENU_STEP_PICKED",
+            "menu_step_leave":      "MENU_STEP_LEAVE",
+            "menu_step_enter":      "MENU_STEP_ENTER",
+            "menu_step_build":      "MENU_STEP_BUILD",
+            "menu_step_finish":     "MENU_STEP_FINISH",
+            "menu_task_idle":       "MENU_TASK_IDLE",
             "shop_ownership_base":  "SHOP_OWNERSHIP_BASE",
             "du_char_capsules":     "DU_CHAR_CAPSULES",
             "du_bases":             "DU_BASES",
@@ -1130,8 +1144,9 @@ class B3Interface:
         from this byte each time it is entered, so the change shows the next
         time the player arrives there (from the shop, Options, the title...).
         If the player is sitting on the main menu, the menu is rebuilt on the
-        spot. Safe on any screen. NTSC-U only."""
-        if getattr(self, "_crc", "") != GAME_CRC:
+        spot. Safe on any screen. Only on versions whose menu is known."""
+        crc = getattr(self, "_crc", "")
+        if not (crc == GAME_CRC or self._version.get("menu_rebuild")):
             return
         value = 0x01 if available else 0x00
         if self.pine.read8(DA_MENU_FLAG) != value:

@@ -80,6 +80,22 @@ VERSIONS = {
         "shop_purchase_base":   0x005510C7,   # NTSC-U: same as ownership, indexed by own_idx
         "shop_purchase_by_display": False,
         "addr_shop_count":  0x0088DCEC,
+        # Main menu (same values as DA_MENU_FLAG / ADDR_SYSTEM_TASK ... below; listed
+        # so that they are put back when the client moves from one version to another)
+        "da_menu_flag":         0x0046A659,
+        "addr_system_task":     0x004281E0,
+        "addr_menu_manager":    0x00428384,
+        "addr_menu_closed":     0x004281E8,
+        "addr_menu_faded":      0x004281EC,
+        "addr_menu_target":     0x004281F0,
+        "addr_menu_next":       0x004281F4,
+        "menu_step_idle":       0x001F0DF0,
+        "menu_step_picked":     0x001F0BD0,
+        "menu_step_leave":      0x001F0960,
+        "menu_step_enter":      0x001F0820,
+        "menu_step_build":      0x001F06C0,
+        "menu_step_finish":     0x001F0540,
+        "menu_task_idle":       0x0026A8D0,
         "du_bases": {
             "Goku":       {"du_id": 0x00, "base": 0x0049D260},
             "Kid Gohan":  {"du_id": 0x02, "base": 0x0049F680},
@@ -179,6 +195,25 @@ VERSIONS = {
         "da_ticket_display":    0x004DFD1D,   # GHE display table (main menu)
         "da_ticket_ownership":  0x0059CCA1,   # shop ownership table
         "da_ticket_du_rt":      0x0051167D,   # RT/DU-RT table (DU context)
+        # Dragon Arena on the main menu, and rebuilding the menu in place: the
+        # same flag, words and steps as Greatest Hits (see DA_MENU_FLAG and
+        # ADDR_SYSTEM_TASK below), found by lining the two builds up. The steps
+        # hand over to each other in the same order.
+        "menu_rebuild":         True,
+        "da_menu_flag":         0x004B4BE9,   # (0x4B4B62, used next to it, is the menu cursor)
+        "addr_system_task":     0x004705F0,
+        "addr_menu_manager":    0x004707D8,
+        "addr_menu_closed":     0x004705F8,
+        "addr_menu_faded":      0x004705FC,
+        "addr_menu_target":     0x00470600,
+        "addr_menu_next":       0x00470604,
+        "menu_step_idle":       0x001EE6D0,
+        "menu_step_picked":     0x001EE530,
+        "menu_step_leave":      0x001EE320,
+        "menu_step_enter":      0x001EE250,
+        "menu_step_build":      0x001EE150,
+        "menu_step_finish":     0x001EE040,
+        "menu_task_idle":       0x00267440,
         "shop_ownership_base":  0x00511453,   # RT_CAPS_BASE - 40 (same table, different offset)
         "shop_purchase_base":   0x0059CA9D,   # BL: quantity table, indexed by DISPLAY index
         "shop_purchase_by_display": True,
@@ -1001,7 +1036,8 @@ DA_TICKET_DU_RT     = 0x004C713D  # DU Real-Time
 # is left, so the client sets it itself.
 DA_MENU_FLAG        = 0x0046A659
 
-# Rebuilding the main menu in place (NTSC-U). The system task (pointer at
+# Rebuilding the main menu in place (Greatest Hits values; Black Label's are in
+# VERSIONS). The system task (pointer at
 # ADDR_SYSTEM_TASK, current step at +0x1C) walks through fixed steps; each waits
 # for a word before handing over to the next. Leaving the menu and entering it
 # again with the menu itself as the destination makes the game tear the menu
