@@ -38,26 +38,33 @@ def _build():
     for char_id, sagas in SAGA_POINTS.items():
         char = CHAR_NAMES[char_id]
         for block, saga in sagas.items():
-            prefix = f"{char} DU - {SAGA_NAMES[block]} Saga - "
             landmarks = [(pt.x, pt.z, place_name(block, pt.type)) for pt in saga["points"]
                          if place_name(block, pt.type) not in VAGUE_PLACES]
-            talks, items = {}, 0
+            talks = {}
             for pt in saga["points"]:
                 kind = interact_kind(pt)
                 if kind is None:
                     continue
+                # "<character> DU - <saga> Saga - Ch.<chapter> - <where> ..."
+                prefix = f"{char} DU - {SAGA_NAMES[block]} Saga - Ch.{pt.chapter + 1} - "
                 place = place_name(block, pt.type)
                 if kind == "talk":
-                    talks[place] = talks.get(place, 0) + 1
-                    name = f"{prefix}{place} Talk {talks[place]}"
+                    count = talks[(pt.chapter, place)] = talks.get((pt.chapter, place), 0) + 1
+                    name = f"{prefix}{place} Talk {count}"
                 else:
-                    items += 1
-                    name = f"{prefix}Item {items}"
+                    # a pickup: where it is, and what it holds in the normal game
                     if place not in VAGUE_PLACES:
-                        name += f" ({place})"
+                        where = place
                     elif landmarks:
                         near = min(landmarks, key=lambda m: (m[0] - pt.x) ** 2 + (m[1] - pt.z) ** 2)
-                        name += f" (near {near[2]})"
+                        where = f"??? near {near[2]}"
+                    else:
+                        where = "???"
+                    base = f"{prefix}{where} ({pt.gives})"
+                    name, copy = base, 1
+                    while name in names:              # two alike in one chapter: number them
+                        copy += 1
+                        name = f"{base} #{copy}"
                 cls, ident = pt.code >> 16, pt.code & 0xFFFF
                 names[name] = INTERACT_ID_OFFSET + ((cls - 2000) << 8 | ident)
                 kinds[name] = kind
