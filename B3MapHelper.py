@@ -227,6 +227,11 @@ class Saga:
             self.chapter_of_scene[code] = chapter
         self.fight_codes = {p.code for p in self.points
                             if (p.fight or p.starts_fight) and (p.code >> 16) // 100 != 24}
+        # what each fight queues for after the battle. The game keeps it queued for
+        # the whole fight, and the rest of the client knows the fight by it.
+        self.fight_nexts = {p.next for p in self.points if p.fight and p.next is not None}
+        # points whose fight, once won, ends the saga
+        self.enders = set(data.get("enders", ()))
         # saga exit (next saga) and the way back
         marker = data["marker"]
         self.exit = marker[0] if marker else None
@@ -589,6 +594,8 @@ class MapHelper:
         screen = p.read16(ADDR_SCREEN)
         if screen == SCREEN_RESULTS_WIN:
             self._after_win = True
+        elif screen == SCREEN_DU_BATTLE:
+            self._after_win = False
 
         # what is running right now
         task = p.read32(ADDR_EVENT_TASK)
@@ -718,6 +725,11 @@ class MapHelper:
         for addr, code in zip(addrs, p.read32_many(addrs)):
             if code == NONE:
                 continue
+            if code in saga.fight_nexts and not self._after_win:
+                # A fight that leads straight to the saga's end (Tien's Nappa,
+                # Piccolo's last on Namek) has it queued from the start: it is
+                # only taken out once the fight is won.
+                continue
             if (code >> 16) in ENDING_EVENT_CLASSES:
                 if self._ending_ok:
                     continue
@@ -738,7 +750,11 @@ class MapHelper:
                     p.write32(addr, self._redirect)
             elif not self._leaving and (code >> 16) != 100 + 2 * saga.block:
                 p.write32(addr, NONE)
-                if self._after_win and saga.key not in self.finished:
+                if (code >> 16) != 101 + 2 * saga.block:
+                    continue          # left over from getting here, not this saga's end
+                # Only a scene after the saga's last fight, or that fight itself once
+                # won, queues the saga's end: the saga is finished.
+                if saga.key not in self.finished:
                     self.finished.add(saga.key)
                     self.save_state()
                 if self._told != saga.key:
@@ -752,6 +768,12 @@ class MapHelper:
                             f"[B3] {SAGA_NAMES[saga.block]} saga finished. Take the white marker "
                             f"on the map to move on to the next saga.")
 
+    def saga_finished(self, saga: Saga) -> bool:
+        """Was the saga's last fight won? Recorded when the game queues the saga's
+        end; the fights won say the same, should that have been missed."""
+        return (saga.key in self.finished
+                or not saga.enders.isdisjoint(self.done.get(saga.char_id, ())))
+
     def _markers(self, saga: Saga, chapter: int) -> dict:
         """event -> (colour name, x, z) for the chapter and saga markers."""
         markers = {}
@@ -761,7 +783,7 @@ class MapHelper:
         if chapter - 1 in saga.opening:
             markers[saga.opening[chapter - 1]] = ("chapter_back", *saga.back_spot)
         if (saga.exit_target is not None and chapter == saga.chapters - 1 and not self.exit_locked(saga)
-                and (self.free_travel or saga.key in self.finished)):
+                and (self.free_travel or self.saga_finished(saga))):
             markers[saga.exit] = ("saga", *saga.next_spot)
         if saga.previous and chapter == 0:
             markers.setdefault(saga.previous[0], ("saga_back", *saga.back_spot))

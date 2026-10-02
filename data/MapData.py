@@ -5,6 +5,7 @@
 # SAGA_POINTS[du character id][saga block 0-3] = {
 #     "marker":  (event, x, z) or None   event that ends the saga, and a free spot for it
 #     "openers": {chapter: event}        scene that opens each chapter after the first
+#     "enders":  (event, ...)            points whose fight, once won, ends the saga
 #     "points":  [MapPoint, ...]         in the order the game's own scripts reach them
 # }
 # An event code is (class << 16) | id. See MapPoint below for the fields.
@@ -32,6 +33,7 @@ SAGA_POINTS = {
         0: {   # Saiyan saga
             "marker": (0x00650000, -3700, 8276),
             "openers": {1: 0x15180001, 2: 0x15180003},
+            "enders": (0x1388000F, 0x15180004, ),
             "points": [
                 P(0x13880001, 0x041, 0, 1500, -9865, 34, -665, -1, 100, 0, False, None, False, None, None),
                 P(0x13880002, 0x041, 1, 1000, 7704, 9, 4412, -1, 100, 0, False, None, False, None, None),
@@ -90,6 +92,7 @@ SAGA_POINTS = {
         1: {   # Frieza saga
             "marker": (0x00670000, 286, -6998),
             "openers": {1: 0x157C0001, 2: 0x157C0003, 3: 0x157C0012, 4: 0x157C0007},
+            "enders": (0x13EC0014, 0x13EC000E, 0x157C000E, 0x157C000F, 0x157C000A, 0x157C000C, ),
             "points": [
                 P(0x157C0000, 0x001, 2, 1000, 4918, 67, -4916, -1, 100, 0, True, 0x157C0001, False, 0x157C0001, None),
                 P(0x09610000, 0x241, 6, 1000, -4160, 130, -3202, -1, 100, 0, True, None, False, None, None),
@@ -139,6 +142,7 @@ SAGA_POINTS = {
         2: {   # Cell saga
             "marker": (0x00690000, -3365, -10000),
             "openers": {},
+            "enders": (0x15E00000, ),
             "points": [
                 P(0x14500000, 0x041, 14, 1500, -1133, 59, 8244, -1, 100, 0, False, None, False, None, None),
                 P(0x14500001, 0x041, 1, 1000, 7704, 9, 4412, -1, 100, 0, False, None, False, None, None),
@@ -165,6 +169,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {1: 0x16440001},
+            "enders": (),
             "points": [
                 P(0x14B40001, 0x041, 18, 1500, 5604, 34, 1602, -1, 100, 0, False, None, False, None, None),
                 P(0x14B40002, 0x041, 12, 1500, 7000, 43, -1552, -1, 100, 0, False, None, False, None, None),
@@ -241,6 +246,7 @@ SAGA_POINTS = {
         0: {   # Saiyan saga
             "marker": (0x00650002, -7142, -9900),
             "openers": {1: 0x151A0001, 2: 0x138A0017},
+            "enders": (0x138A0012, 0x151A0005, ),
             "points": [
                 P(0x138A0001, 0x001, 4, 1000, 2892, 126, 4600, -1, 100, 0, False, None, False, None, None),
                 P(0x138A0003, 0x001, 5, 1000, 6326, 120, 556, -1, 100, 0, False, None, False, None, None),
@@ -290,6 +296,7 @@ SAGA_POINTS = {
         1: {   # Frieza saga
             "marker": (0x00670002, -7317, 5645),
             "openers": {1: 0x157E0001, 2: 0x157E0003},
+            "enders": (),
             "points": [
                 P(0x08360000, 0x0B0, 9, 1000, -7317, 40, 397, -1, 100, 0, False, None, False, None, None),
                 P(0x08360001, 0x0B0, 9, 1000, 5976, 45, -3421, -1, 100, 0, False, None, False, None, None),
@@ -325,6 +332,7 @@ SAGA_POINTS = {
         2: {   # Cell saga
             "marker": (0x00690003, -10837, 10213),
             "openers": {1: 0x15E30001},
+            "enders": (),
             "points": [
                 P(0x14530003, 0x041, 15, 1500, 1419, 39, -3392, -1, 100, 0, False, None, False, None, None),
                 P(0x14530006, 0x04D, 4, 1000, -7957, 150, -9306, -1, 100, 0, False, None, False, None, None),
@@ -380,6 +388,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {1: 0x16480001, 2: 0x16480003, 3: 0x1648000F, 4: 0x16480013},
+            "enders": (),
             "points": [
                 P(0x14B80001, 0x041, 2, 1500, 2214, 20, -10169, -1, 100, 0, False, None, False, None, None),
                 P(0x14B80002, 0x041, 1, 1000, 7704, 9, 4412, -1, 100, 0, False, None, False, None, None),
@@ -440,6 +449,7 @@ SAGA_POINTS = {
         0: {   # Saiyan saga
             "marker": (0x00650007, -9365, 11276),
             "openers": {1: 0x151F0001},
+            "enders": (0x151F0002, ),
             "points": [
                 P(0x138F0005, 0x041, 1, 1000, 7704, 9, 4412, -1, 100, 0, False, None, False, None, None),
                 P(0x138F0007, 0x041, 0, 1500, -9865, 34, -665, -1, 100, 0, False, None, False, None, None),
@@ -472,6 +482,7 @@ SAGA_POINTS = {
         1: {   # Frieza saga
             "marker": (0x00670007, 1876, 5549),
             "openers": {1: 0x15830001, 2: 0x15830003},
+            "enders": (0x15830004, 0x15830006, ),
             "points": [
                 P(0x13F30001, 0x001, 2, 1000, 5451, 45, -5403, -1, 100, 0, False, None, False, None, None),
                 P(0x13F30003, 0xA41, 2, 1000, 1679, 15, -3421, -1, 100, 0, False, None, False, None, None),
@@ -500,6 +511,7 @@ SAGA_POINTS = {
         2: {   # Cell saga
             "marker": (0x00690007, 7635, -7341),
             "openers": {1: 0x15E70003, 2: 0x15E70005},
+            "enders": (0x15E70006, ),
             "points": [
                 P(0x14570000, 0x041, 18, 1500, 5604, 34, 1602, -1, 100, 0, False, None, False, None, None),
                 P(0x14570006, 0x041, 2, 1500, -307, 20, -6309, -1, 100, 0, False, None, False, None, None),
@@ -529,6 +541,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {1: 0x164B0001, 2: 0x164B000F},
+            "enders": (),
             "points": [
                 P(0x14BB0001, 0x041, 5, 1500, -10447, 40, -2587, -1, 100, 0, False, None, False, None, None),
                 P(0x14BB0002, 0x001, 2, 1500, -5408, 40, -4397, -1, 100, 0, False, None, True, 0x164B0001, None),
@@ -586,6 +599,7 @@ SAGA_POINTS = {
         0: {   # Saiyan saga
             "marker": (0x0065000A, -8515, -10402),
             "openers": {1: 0x13920010},
+            "enders": (0x15220001, ),
             "points": [
                 P(0x13920001, 0x001, 1, 1000, 7704, 9, 4412, -1, 100, 0, False, None, False, None, None),
                 P(0x13920007, 0xA41, 4, 1000, -6551, 85, 2908, -1, 100, 0, False, None, False, None, None),
@@ -623,6 +637,7 @@ SAGA_POINTS = {
         1: {   # Frieza saga
             "marker": (0x0067000A, 2398, 5590),
             "openers": {1: 0x15860001, 2: 0x15860003, 3: 0x15860005},
+            "enders": (0x15860008, ),
             "points": [
                 P(0x13F60001, 0x001, 0, 1000, -4620, 285, -5410, -1, 100, 0, False, None, False, None, None),
                 P(0x0961001C, 0x241, 6, 1000, 687, 55, 428, -1, 100, 0, True, None, False, None, None),
@@ -652,6 +667,7 @@ SAGA_POINTS = {
         2: {   # Cell saga
             "marker": (0x0069000A, -8157, -10109),
             "openers": {},
+            "enders": (),
             "points": [
                 P(0x145A0001, 0x041, 2, 1500, 1504, 20, 8407, -1, 100, 0, False, None, False, None, None),
                 P(0x145A0003, 0x041, 4, 1500, -6728, 20, 7243, -1, 100, 0, False, None, False, None, None),
@@ -674,6 +690,7 @@ SAGA_POINTS = {
         0: {   # Saiyan saga
             "marker": (0x0065000B, 568, 11639),
             "openers": {1: 0x15230001, 2: 0x15230003, 3: 0x13930004},
+            "enders": (0x15230009, 0x15230007, ),
             "points": [
                 P(0x13930001, 0x001, 5, 1000, -9246, 103, -4858, -1, 100, 0, False, None, False, None, None),
                 P(0x1393000C, 0x041, 0, 1500, -9865, 34, -665, -1, 100, 0, False, None, False, None, None),
@@ -723,6 +740,7 @@ SAGA_POINTS = {
         1: {   # Frieza saga
             "marker": (0x0067000B, 862, -7000),
             "openers": {1: 0x15870001, 2: 0x15870007},
+            "enders": (0x13F70009, 0x15870002, 0x15870004, 0x15870008, ),
             "points": [
                 P(0x13F70003, 0xA4D, 2, 1000, -2136, 15, -105, -1, 100, 0, False, None, False, None, None),
                 P(0x13F70004, 0xA41, 2, 1000, -3785, 15, -266, -1, 100, 0, False, None, False, None, None),
@@ -756,6 +774,7 @@ SAGA_POINTS = {
         2: {   # Cell saga
             "marker": (0x0069000B, -1365, 9037),
             "openers": {1: 0x15EB0001, 2: 0x15EB0004},
+            "enders": (0x15EB0006, 0x15EB0008, ),
             "points": [
                 P(0x145B0001, 0x041, 15, 1500, 1419, 39, -3392, -1, 100, 0, False, None, False, None, None),
                 P(0x145B0004, 0x041, 21, 1000, -9865, 34, -665, -1, 100, 0, False, None, False, None, None),
@@ -786,6 +805,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {1: 0x164F0001},
+            "enders": (),
             "points": [
                 P(0x14BF0000, 0x008, 3, 1500, -742, 20, -5682, -1, 100, 0, False, None, False, None, None),
                 P(0x14BF0004, 0x040, 3, 1500, 5376, 20, -2712, -1, 100, 0, False, None, False, None, None),
@@ -814,6 +834,7 @@ SAGA_POINTS = {
         0: {   # Saiyan saga
             "marker": (0x0065000C, -11205, 7923),
             "openers": {1: 0x13940008},
+            "enders": (0x15240001, ),
             "points": [
                 P(0x13940005, 0xA41, 5, 1000, -8611, 65, -5815, 0, 20, 0, False, None, False, None, None),
                 P(0x1394000B, 0xA41, 5, 1000, -8611, 65, -5815, 21, 99, 0, False, None, False, None, None),
@@ -845,6 +866,7 @@ SAGA_POINTS = {
         2: {   # Cell saga
             "marker": (0x0069000C, -9865, 10037),
             "openers": {1: 0x15EC0001},
+            "enders": (0x145C0006, 0x15EC0002, ),
             "points": [
                 P(0x145C0000, 0x041, 30, 1500, 7000, 43, -1552, -1, 100, 0, False, None, False, None, None),
                 P(0x145C0001, 0x041, 2, 1500, 6124, 20, -2975, -1, 100, 0, False, None, False, None, None),
@@ -871,6 +893,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {1: 0x16500003},
+            "enders": (),
             "points": [
                 P(0x14C00000, 0x041, 16, 1500, -889, 51, -9101, -1, 100, 0, False, None, False, None, None),
                 P(0x14C00002, 0x041, 1, 1000, 7704, 9, 4412, -1, 100, 0, False, None, False, None, None),
@@ -899,6 +922,7 @@ SAGA_POINTS = {
         0: {   # Saiyan saga
             "marker": (0x0065000D, 9635, 7940),
             "openers": {},
+            "enders": (0x15250002, 0x15250000, ),
             "points": [
                 P(0x13950001, 0x001, 9, 800, -9865, 336, -665, 0, 20, 0, False, None, False, None, None),
                 P(0x1395000A, 0x001, 9, 800, -9865, 336, -665, 21, 99, 0, False, None, False, None, None),
@@ -926,6 +950,7 @@ SAGA_POINTS = {
         2: {   # Cell saga
             "marker": (0x0069000D, 10135, -10790),
             "openers": {},
+            "enders": (0x15ED0000, ),
             "points": [
                 P(0x145D0000, 0x041, 5, 1500, 5935, 20, 881, -1, 100, 0, False, None, False, None, None),
                 P(0x145D0001, 0x041, 9, 1500, -9865, 334, -665, -1, 100, 0, False, None, False, None, None),
@@ -949,6 +974,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {},
+            "enders": (),
             "points": [
                 P(0x14C10001, 0x040, 2, 1500, 3908, 20, -940, -1, 100, 0, False, None, False, None, None),
                 P(0x14C10000, 0x000, 2, 1500, 3908, 20, -940, -1, 100, 0, False, None, False, None, None),
@@ -978,6 +1004,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {1: 0x16550001, 2: 0x16550003, 3: 0x16550007},
+            "enders": (),
             "points": [
                 P(0x14C50001, 0x041, 10, 1500, -4800, 43, -1200, -1, 100, 0, False, None, False, None, None),
                 P(0x14C50002, 0x041, 4, 1500, -1864, 20, -6700, -1, 100, 0, False, None, False, None, None),
@@ -1024,6 +1051,7 @@ SAGA_POINTS = {
         3: {   # Buu saga
             "marker": None,
             "openers": {},
+            "enders": (),
             "points": [
                 P(0x14D60001, 0x041, 1, 1500, 7704, 9, 4412, -1, 100, 0, True, None, False, None, None),
                 P(0x14D60003, 0x041, 9, 1500, -9865, 34, -665, -1, 100, 0, True, None, False, None, None),
