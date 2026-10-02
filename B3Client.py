@@ -120,10 +120,10 @@ class B3Context(CommonContext):
         self.db_checks_sent: set = set()     # "char#bit" already sent
         self.wish_checks_sent: set = set()   # char already wished
 
-        # Experience items: how much of what was received has been given to a
-        # character so far (kept on disk per seed and slot, so nothing is given twice)
+        # Experience items: how much of what was received each character has been
+        # given so far (kept on disk per seed and slot, so nothing is given twice)
         self._exp_state_path: Optional[str] = None
-        self._exp_applied: Optional[int] = None
+        self._exp_applied: Optional[dict] = None     # character -> amount given
 
         # Item names shown in the game (map hover labels, shop list)
         self.item_texts: dict = {}           # location name -> (item, " (player)", importance)
@@ -564,9 +564,10 @@ class B3Context(CommonContext):
             "b3_map_helper", f"{sd.get('seed', 'seed')}_{self.slot}_experience.json")
         try:
             with open(self._exp_state_path) as fh:
-                self._exp_applied = int(json.load(fh).get("applied", 0))
+                saved = json.load(fh).get("given", {})
+            self._exp_applied = {str(k): int(v) for k, v in saved.items()}
         except Exception:
-            self._exp_applied = 0
+            self._exp_applied = {}
 
         # DeathLink
         # A /deathlink toggle outranks the YAML, so reconnecting doesn't undo it.
@@ -678,8 +679,8 @@ class B3Context(CommonContext):
 
         elif name.startswith("Experience"):
             # Given out by _service_experience (to the character being played).
-            logger.info(f"[B3] {name} received — it goes to the Dragon Universe "
-                        f"character you are playing (or play next).")
+            logger.info(f"[B3] {name} received — every Dragon Universe character "
+                        f"gets it when you play them.")
 
         elif name == "HP Drain Trap":
             # No per-item increment (that would re-queue every trap on reconnect
@@ -692,27 +693,39 @@ class B3Context(CommonContext):
 
     def _service_experience(self):
         """Give received Experience to the Dragon Universe character being played.
-        Done on the world map only, and held back while that character is at the
-        level cap so it goes to the next one played instead."""
+
+        Every character gets the full amount, each when it is played: experience
+        is kept per character in the game, so there is nothing to choose. Done on
+        the world map only. A character at the level cap is left alone."""
         if self._exp_applied is None:
             return
-        pending = self.count_experience() - self._exp_applied
-        if pending <= 0:
+        total = self.count_experience()
+        if total <= 0:
             return
         from .data.Constants import SCREEN_WORLD_MAP
         if not self.iface.in_du() or self.iface.get_screen() != SCREEN_WORLD_MAP:
             return
         char = self.iface.get_active_du_char_name()
-        if not char or not 1 <= self.iface.get_du_level(char) < 99:
+        if not char:
+            return
+        given = self._exp_applied.get(char, 0)
+        have = self.iface.get_du_experience(char)
+        if have < 0:
+            return
+        if have < given:
+            given = 0                 # less than we gave: this story was started over
+        pending = total - given
+        # the game counts levels from 0: 98 is level 99, the cap
+        if pending <= 0 or not 0 <= self.iface.get_du_level(char) < 98:
             return
         if not self.iface.add_du_experience(char, pending):
             return
-        self._exp_applied += pending
+        self._exp_applied[char] = total
         try:
             import os
             os.makedirs(os.path.dirname(self._exp_state_path), exist_ok=True)
             with open(self._exp_state_path, "w") as fh:
-                json.dump({"applied": self._exp_applied}, fh)
+                json.dump({"given": self._exp_applied}, fh)
         except Exception as e:
             logger.debug(f"[B3] could not save experience state: {e}")
         logger.info(f"[B3] {pending} experience given to {char} — "

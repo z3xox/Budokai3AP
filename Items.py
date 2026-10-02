@@ -55,8 +55,8 @@ CAPSULE_ITEMS.update({
 })
 
 # ─── Experience (filler) ──────────────────────────────────────────────────────
-# Added to the Dragon Universe character being played when it arrives. The game
-# turns it into level-ups (with the usual stat choice) on the next fight won.
+# Every Dragon Universe character gets the amount, each when it is played. The
+# game turns it into level-ups (with the usual stat choice) on the next fight won.
 EXPERIENCE_ITEMS = {
     "Experience x1000":  B3_BASE_ID + 0x340,
     "Experience x2500":  B3_BASE_ID + 0x341,

@@ -1048,8 +1048,18 @@ class B3Interface:
         self.pine.write8(du_rt + du_rt_shift, 0x01)
         self.pine.write8(rt + rt_shift, 0x01)
 
+    def get_du_experience(self, char_name: str) -> int:
+        """A character's total Dragon Universe experience, or -1 if unknown."""
+        if char_name not in DU_BASES:
+            return -1
+        try:
+            return self.pine.read32(DU_BASES[char_name]["base"] + OFFSET_EXP)
+        except Exception:
+            return -1
+
     def get_du_level(self, char_name: str) -> int:
-        """A character's Dragon Universe level (1-99), or -1 if unknown."""
+        """A character's Dragon Universe level as the game stores it: counted
+        from 0, so 0 is level 1 and 98 is level 99. -1 if unknown."""
         if char_name not in DU_BASES:
             return -1
         try:
