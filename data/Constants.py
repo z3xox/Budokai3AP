@@ -1318,6 +1318,7 @@ MAP_POINTS_OFF        = 0x80
 MAP_POINT_COUNT       = 64
 MAP_POINT_SIZE        = 0x40
 MAP_POINT_REQ_CAPSULE = 0x30
+MAP_POINT_REQ_EQUIPPED = 0x2C        # capsule that has to be equipped (script tag 0x22)
 MAP_POINT_LEVEL_MIN   = 0x34         # level max follows at +0x38
 MAP_POINT_DONE        = 0x8000
 ADDR_MAP_HUD_PTR      = 0x00428464   # -> map HUD struct; its texture sheet at +0x64

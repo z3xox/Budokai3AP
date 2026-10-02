@@ -33,7 +33,7 @@ from .data.Constants import (
     DU_BASES, DU_MODE, ADDR_MODE, ADDR_DU_CHAR, ADDR_SCREEN, OFFSET_SAGA, OFFSET_DRAGONBALLS,
     SCREEN_WORLD_MAP, SCREEN_DU_BATTLE, SCREEN_RESULTS_WIN,
     MAP_HELPER_CRC, ADDR_MAP_PTR, MAP_POINTS_OFF, MAP_POINT_COUNT, MAP_POINT_SIZE,
-    MAP_POINT_REQ_CAPSULE, MAP_POINT_LEVEL_MIN, MAP_POINT_DONE, ADDR_MAP_HUD_PTR,
+    MAP_POINT_REQ_CAPSULE, MAP_POINT_REQ_EQUIPPED, MAP_POINT_LEVEL_MIN, MAP_POINT_DONE, ADDR_MAP_HUD_PTR,
     ADDR_EVENT_TASK, ADDR_EVENT_PENDING, OFFSET_EVENT_QUEUED, SAGA_EVENT_CLASSES,
     ENDING_EVENT_CLASSES,
     MAP_PATCH_MARKER, MAP_PATCH_MINIMAP, ADDR_MAP_DOT_DRAW, ORIG_MAP_DOT_DRAW,
@@ -825,18 +825,25 @@ class MapHelper:
         used = [i for i, code in enumerate(codes) if code not in (0, NONE)]
         fields = p.read32_many([slots[i] + off for i in used
                                 for off in (0x04, 0x10, 0x18, MAP_POINT_REQ_CAPSULE,
-                                            MAP_POINT_LEVEL_MIN, MAP_POINT_TYPE)])
+                                            MAP_POINT_LEVEL_MIN, MAP_POINT_TYPE,
+                                            MAP_POINT_REQ_EQUIPPED)])
         kinds, free, changed = {}, [i for i, code in enumerate(codes) if code in (0, NONE)], 0
         on_map = {}                                         # event -> colour name, for what we placed
         for n, i in enumerate(used):
             code = codes[i]
-            flags, x, z, capsule, level_min, place = fields[6 * n:6 * n + 6]
+            flags, x, z, capsule, level_min, place, equipped = fields[7 * n:7 * n + 7]
             if code in want:
                 words = want.pop(code)
                 if place != words[2]:
                     p.write32(slots[i] + MAP_POINT_TYPE, words[2])
                 if capsule != NONE:                         # second-play / capsule lock
                     p.write32(slots[i] + MAP_POINT_REQ_CAPSULE, NONE)
+                if equipped != NONE:
+                    # A scene can put a point back with a skill that has to be
+                    # equipped (Goku's Frieza fight after he turns Super Saiyan):
+                    # the point would be hidden, and its other version is merged away.
+                    p.write32(slots[i] + MAP_POINT_REQ_EQUIPPED, NONE)
+                    changed += 1
                 if level_min != NONE:                       # level lock
                     p.write32(slots[i] + MAP_POINT_LEVEL_MIN, NONE)
                     p.write32(slots[i] + MAP_POINT_LEVEL_MIN + 4, 100)
