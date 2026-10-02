@@ -115,6 +115,9 @@ def free_spot(points, avoid=()):
     return max(cells, key=lambda c: min((c[0] - x) ** 2 + (c[1] - z) ** 2 for x, z in taken))
 
 
+WORLD_SCENE_DONOR = 0x00     # Goku: his saga-ending scenes all change the world
+
+
 def previous_saga(sagas: dict, char_id: int, block: int):
     """(marker event, start event of the previous saga, its block), or None.
 
@@ -122,7 +125,11 @@ def previous_saga(sagas: dict, char_id: int, block: int):
     and Namek only swap in the scenes that END a saga (script tag 0x2F picks the
     world, 0x32 reloads the map): 101 goes to Namek, 103 back to Earth. So when
     the previous saga is on the other world the marker carries one of those, and
-    the saga start it queues is replaced by the one wanted."""
+    the saga start it queues is replaced by the one wanted.
+
+    A story that ends with the saga in question has that scene without the world
+    change (Kid Gohan's ends on Namek: his 103 just plays and stays). The scenes
+    are the same for everyone apart from that, so Goku's is used instead."""
     earlier = [b for b in sagas if b < block]
     if not earlier:
         return None
@@ -131,9 +138,8 @@ def previous_saga(sagas: dict, char_id: int, block: int):
     if (prev == 1) == (block == 1):                     # same world
         return start, start, prev
     ending, owner = (101, 0) if prev == 1 else (103, 1)
-    if not sagas.get(owner, {}).get("marker"):          # this character has no such scene
-        return None
-    return (ending << 16) | char_id, start, prev
+    goes_on = any(b > owner for b in sagas)             # the story continues after that saga
+    return (ending << 16) | (char_id if goes_on else WORLD_SCENE_DONOR), start, prev
 
 
 def point_words(pt, x, z, place_type=None) -> list:
@@ -233,6 +239,8 @@ class Saga:
         # every code the helper may put on (and so may take off) the map
         self.managed = set(self.by_code) | set(self.opening.values())
         self.managed.update((cls << 16) | char_id for cls in SAGA_EVENT_CLASSES)
+        if self.previous:
+            self.managed.add(self.previous[0])
 
 
 class MapHelper:
