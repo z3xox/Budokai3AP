@@ -169,6 +169,29 @@ class Pine:
     def write32(self, addr: int, val: int):
         self._send(self._req(6, addr, (val & 0xFFFFFFFF).to_bytes(4, "little")))
 
+    def write32_many(self, pairs):
+        """Write many 32-bit words, (address, value) pairs, batching several
+        commands per IPC message like read32_many does."""
+        pairs = list(pairs)
+        for i in range(0, len(pairs), self.MAX_BATCH):
+            if not self._batch_ok:
+                for addr, val in pairs[i:]:
+                    self.write32(addr, val)
+                return
+            chunk = pairs[i:i + self.MAX_BATCH]
+            body = b"".join((6).to_bytes(1, "little") + a.to_bytes(4, "little")
+                            + (v & 0xFFFFFFFF).to_bytes(4, "little") for a, v in chunk)
+            try:
+                resp = self._send((len(body) + 4).to_bytes(4, "little") + body)
+            except Exception:
+                resp = b""
+            if resp[4:5] != b"\x00":
+                # Batching unsupported (or the reply desynced) — single writes
+                # from here on, on a clean socket. Rewriting this chunk is harmless.
+                self._batch_ok = False
+                self.disconnect()
+                self.connect()
+
     def write_bytes(self, addr: int, data: bytes):
         for i in range(0, len(data), 4):
             chunk = data[i:i+4]

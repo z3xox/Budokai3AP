@@ -427,6 +427,37 @@ FIGHT_LOCATIONS = {
     ("Vegeta", 0x03, 0x15): "Vegeta DU - Broly [Goku Friendship]",
     ("Vegeta", 0x03, 0x17): "Vegeta DU - Gotenks (SS)",
     ("Vegeta", 0x03, 0x19): "Vegeta DU - Goku (SS4)",
+    # ── Fights found in the game data (du_fight_extract.py). They are second-play
+    # or alternate-route fights, so they are only locations with the map helper
+    # on (Locations.DU_BATTLE_LOCATIONS_MAP_HELPER), which puts them on the map.
+    ("Goku", 0x00, 0x20): "Goku DU - Tien (World Tournament)",
+    ("Goku", 0x01, 0x07): "Goku DU - Cooler",
+    ("Goku", 0x01, 0x09): "Goku DU - Vegeta (Namek)",
+    ("Goku", 0x01, 0x0B): "Goku DU - Metal Cooler",
+    ("Goku", 0x01, 0x0D): "Goku DU - Cooler (Rematch)",
+    ("Goku", 0x01, 0x12): "Goku DU - Frieza Final Form (Cooler Route)",
+    ("Goku", 0x03, 0x0E): "Goku DU - Uub",
+    ("Goku", 0x03, 0x10): "Goku DU - Broly",
+    ("Goku", 0x03, 0x12): "Goku DU - Gotenks (as Gogeta)",
+    ("Goku", 0x03, 0x14): "Goku DU - Omega Shenron",
+    ("Goku", 0x03, 0x16): "Goku DU - Vegito vs Buuhan (2nd Route)",
+    ("Goku", 0x03, 0x18): "Goku DU - Super Buu (Inside Buu) (2nd Route)",
+    ("Goku", 0x03, 0x1A): "Goku DU - Gotenks (as Gogeta) (Ending)",
+    ("Kid Gohan", 0x00, 0x03): "Kid Gohan DU - Goku",
+    ("Kid Gohan", 0x00, 0x17): "Kid Gohan DU - Saibaman (2nd Route)",
+    ("Kid Gohan", 0x01, 0x03): "Kid Gohan DU - Goku (Namek)",
+    ("Kid Gohan", 0x01, 0x07): "Kid Gohan DU - Cooler",
+    ("Teen Gohan", 0x02, 0x05): "Teen Gohan DU - Tien",
+    ("Teen Gohan", 0x02, 0x07): "Teen Gohan DU - Yamcha",
+    ("Adult Gohan", 0x03, 0x05): "Adult Gohan DU - Vegeta",
+    ("Adult Gohan", 0x03, 0x07): "Adult Gohan DU - Piccolo",
+    ("Adult Gohan", 0x03, 0x0B): "Adult Gohan DU - Dabura (2nd Route)",
+    ("Adult Gohan", 0x03, 0x0F): "Adult Gohan DU - Majin Vegeta",
+    ("Adult Gohan", 0x03, 0x13): "Adult Gohan DU - Kid Buu",
+    ("Adult Gohan", 0x03, 0x15): "Adult Gohan DU - Broly",
+    ("Vegeta", 0x03, 0x03): "Vegeta DU - Adult Gohan",
+    ("Vegeta", 0x03, 0x05): "Vegeta DU - Piccolo",
+    ("Yamcha", 0x00, 0x03): "Yamcha DU - Saibamen (2nd Route)",
 }
 
 # ─── Roster ──────────────────────────────────────────────────────────────────
@@ -1104,3 +1135,70 @@ ITEM_CAPSULES = {
     "WE GOTTA POWER!!!": (0x4C7100, 0x5512B4),
     "WE GOTTA POWER!!!!": (0x4C7101, 0x5512B5),
 }
+
+
+# ─── Map Helper (NTSC-U only) ────────────────────────────────────────────────
+# Addresses the Dragon Universe map helper (B3MapHelper.py) works with. They are
+# only known for NTSC-U, so the helper stays off on any other version.
+MAP_HELPER_CRC      = "c97ef0a4"
+
+# The world map keeps its interaction points in a table of 64 entries x 0x40 bytes:
+#   +0x00 event code ((class << 16) | id; -1 = free; bit 0x8000 of the id = done)
+#   +0x04 flags   +0x08 location type   +0x0C radius (float)
+#   +0x10 x, y, z, w (floats)
+#   +0x2C required equipped capsule   +0x30 required owned capsule (-1 = none)
+#   +0x34 / +0x38 level range (-1 / 100 = no limit)
+ADDR_MAP_PTR          = 0x0055ECC4   # -> world map struct (0 when no map is loaded)
+MAP_POINTS_OFF        = 0x80
+MAP_POINT_COUNT       = 64
+MAP_POINT_SIZE        = 0x40
+MAP_POINT_REQ_CAPSULE = 0x30
+MAP_POINT_LEVEL_MIN   = 0x34         # level max follows at +0x38
+MAP_POINT_DONE        = 0x8000
+ADDR_MAP_HUD_PTR      = 0x00428464   # -> map HUD struct; its texture sheet at +0x64
+MAP_HUD_LABELS        = 0x60         # HUD struct: -> the sheet of place-name labels
+MAP_LABEL_FIRST       = 2            # label for location type t is texture t + 2
+MAP_POINT_TYPE        = 0x08         # point table entry: location type
+MAP_PLAYER_POS        = 0x11C0       # map struct: player x, y, z (floats)
+
+# Location type -> the name the game shows when the player hovers over a point
+# (read from the label sheets, DATA_USA files 0x7AC and 0x7AE; label = type + 2).
+MAP_PLACES_EARTH = {
+    0: "Korin's Tower", 1: "Kame House", 2: "Plains", 3: "Sky", 4: "Mountains", 5: "Forest",
+    6: "Snowy Field", 7: "Craters", 8: "Desert", 9: "Kami's Lookout", 10: "West City",
+    11: "Dr. Gero's Lab", 12: "Hercule City", 13: "East City", 14: "South City",
+    15: "Central City", 16: "North City", 17: "Supreme Kai World", 18: "Goku's House",
+    19: "Baba's Palace", 20: "World Tournament", 21: "Land of Korin", 22: "Babidi's Spaceship",
+    23: "Time Machine", 24: "Buu's House", 25: "Cell Game Ring", 26: "Grandpa Gohan's House",
+    27: "Muscle Tower", 28: "Kami's Spaceship", 29: "???", 30: "Urban Area",
+    31: "Saiyan Spaceship", 32: "Frieza's Spaceship", 33: "Battle Point",
+}
+MAP_PLACES_NAMEK = {
+    0: "Guru's House", 1: "Namek Village", 2: "Planet Namek", 3: "Capsule House",
+    4: "Saiyan Spaceship", 5: "Frieza's Spaceship", 6: "Battle Point", 7: "Save Point",
+    8: "Goku's Spaceship", 9: "???", 10: "Sky",
+}
+
+# Events (the scenes, fights and pickups the points start)
+ADDR_EVENT_TASK       = 0x00428480   # running event's task struct (0 = none); code at +0x14
+ADDR_EVENT_PENDING    = 0x00427CB0   # event queued to run next (-1 = none)
+OFFSET_EVENT_QUEUED   = (0x14, 0x18) # DU struct copies of the queued event
+SAGA_EVENT_CLASSES    = range(100, 107)   # saga start (100/102/104/106) and saga end (101/103/105)
+ENDING_EVENT_CLASSES  = (1, 2)            # the Dragon Universe endings (credits follow)
+
+# Code patches: (address, original instruction, patched instruction)
+MAP_PATCH_MARKER  = (0x002968B8, 0x30630E00, 0x24030400)   # andi v1,v1,0xE00 -> addiu v1,zero,0x400:
+                                                            # every point gets an overworld marker
+MAP_PATCH_MINIMAP = ((0x002A021C, 0x8E620004, 0x8E620000),  # lw v0,4(s3) -> lw v0,0(s3)
+                     (0x002A0220, 0x304200C0, 0x30428000))  # andi v0,v0,0xC0 -> andi v0,v0,0x8000:
+                                                            # the overview shows every point not done
+ADDR_MAP_DOT_DRAW = 0x002A029C   # jal 0x230810 in the overview's dot loop (s4 = point slot)
+ORIG_MAP_DOT_DRAW = 0x0C08C204
+ADDR_MAP_DOT_FN   = 0x00230810
+ADDR_MAP_DOT_CAVE = 0x00624800   # past the client's other caves (0x600000-0x623FFF)
+ADDR_MAP_DOT_TABLE = 0x00624900  # 64 entries x 16 bytes: r, g, b floats
+MAP_DOT_TEXTURE   = 2            # the dot's texture in the HUD sheet; its palette is made
+                                 # grey so the per-dot colour shows
+MAP_DOT_PALETTE   = [0x7A01015C, 0x7002035C, 0x6A000163, 0x6803045D, 0x63070758, 0x58030364,
+                     0x5206075D, 0x4000016D, 0x30040469, 0x8004046E, 0x0D000079, 0x09000178,
+                     0x0000007C, 0x800F0FAE, 0x801718E4, 0x801C1DFE]

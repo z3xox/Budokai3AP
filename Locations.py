@@ -134,6 +134,38 @@ DU_BATTLE_LOCATIONS = {
     "Vegeta DU - Goku (SS4)":                                    B3_LOC_BASE + 0x154,
 }
 
+# Fights that need a second playthrough or an alternate route in the normal game.
+# The map helper puts them on the map, so they are only locations with it on.
+DU_BATTLE_LOCATIONS_MAP_HELPER = {
+    "Goku DU - Tien (World Tournament)":            B3_LOC_BASE + 0x00E,
+    "Goku DU - Cooler":                             B3_LOC_BASE + 0x00F,
+    "Goku DU - Vegeta (Namek)":                     B3_LOC_BASE + 0x010,
+    "Goku DU - Metal Cooler":                       B3_LOC_BASE + 0x011,
+    "Goku DU - Cooler (Rematch)":                   B3_LOC_BASE + 0x012,
+    "Goku DU - Frieza Final Form (Cooler Route)":   B3_LOC_BASE + 0x013,
+    "Goku DU - Uub":                                B3_LOC_BASE + 0x014,
+    "Goku DU - Broly":                              B3_LOC_BASE + 0x015,
+    "Goku DU - Gotenks (as Gogeta)":                B3_LOC_BASE + 0x016,
+    "Goku DU - Omega Shenron":                      B3_LOC_BASE + 0x017,
+    "Goku DU - Vegito vs Buuhan (2nd Route)":       B3_LOC_BASE + 0x018,
+    "Goku DU - Super Buu (Inside Buu) (2nd Route)": B3_LOC_BASE + 0x019,
+    "Goku DU - Gotenks (as Gogeta) (Ending)":       B3_LOC_BASE + 0x01A,
+    "Kid Gohan DU - Goku":                          B3_LOC_BASE + 0x025,
+    "Kid Gohan DU - Saibaman (2nd Route)":          B3_LOC_BASE + 0x026,
+    "Kid Gohan DU - Goku (Namek)":                  B3_LOC_BASE + 0x027,
+    "Kid Gohan DU - Cooler":                        B3_LOC_BASE + 0x028,
+    "Teen Gohan DU - Tien":                         B3_LOC_BASE + 0x045,
+    "Teen Gohan DU - Yamcha":                       B3_LOC_BASE + 0x046,
+    "Adult Gohan DU - Vegeta":                      B3_LOC_BASE + 0x065,
+    "Adult Gohan DU - Piccolo":                     B3_LOC_BASE + 0x066,
+    "Adult Gohan DU - Dabura (2nd Route)":          B3_LOC_BASE + 0x067,
+    "Adult Gohan DU - Majin Vegeta":                B3_LOC_BASE + 0x068,
+    "Adult Gohan DU - Kid Buu":                     B3_LOC_BASE + 0x069,
+    "Adult Gohan DU - Broly":                       B3_LOC_BASE + 0x06A,
+    "Yamcha DU - Saibamen (2nd Route)":             B3_LOC_BASE + 0x0E4,
+    "Vegeta DU - Adult Gohan":                      B3_LOC_BASE + 0x155,
+    "Vegeta DU - Piccolo":                          B3_LOC_BASE + 0x156,
+}
 # ─── Shop Locations ───────────────────────────────────────────────────────────
 # 10 shop slots, AP controls the stock.
 
@@ -198,6 +230,7 @@ WISH_LOCATIONS = {
 
 location_table = {}
 location_table.update(DU_BATTLE_LOCATIONS)
+location_table.update(DU_BATTLE_LOCATIONS_MAP_HELPER)
 location_table.update(SHOP_LOCATIONS)
 location_table.update(DU_COMPLETION_LOCATIONS)
 location_table.update(DRAGON_ARENA_LOCATIONS)

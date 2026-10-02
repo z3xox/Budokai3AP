@@ -2,6 +2,7 @@ from BaseClasses import Region, MultiWorld
 from .Locations import (
     B3Location,
     DU_BATTLE_LOCATIONS,
+    DU_BATTLE_LOCATIONS_MAP_HELPER,
     SHOP_LOCATIONS,
     DU_COMPLETION_LOCATIONS,
     DRAGON_ARENA_LOCATIONS,
@@ -97,6 +98,36 @@ DU_CHARACTER_SAGAS = {
 }
 
 
+# Extra fights that are only locations with the map helper on (same layout).
+DU_CHARACTER_SAGAS_MAP_HELPER = {
+    "Goku": {
+        "Saiyan":  ["Goku DU - Tien (World Tournament)"],
+        "Frieza":  ["Goku DU - Cooler", "Goku DU - Vegeta (Namek)", "Goku DU - Metal Cooler",
+                    "Goku DU - Cooler (Rematch)", "Goku DU - Frieza Final Form (Cooler Route)"],
+        "Buu":     ["Goku DU - Uub", "Goku DU - Broly", "Goku DU - Gotenks (as Gogeta)",
+                    "Goku DU - Omega Shenron", "Goku DU - Vegito vs Buuhan (2nd Route)",
+                    "Goku DU - Super Buu (Inside Buu) (2nd Route)",
+                    "Goku DU - Gotenks (as Gogeta) (Ending)"],
+    },
+    "Kid Gohan": {
+        "Saiyan":  ["Kid Gohan DU - Goku", "Kid Gohan DU - Saibaman (2nd Route)"],
+        "Frieza":  ["Kid Gohan DU - Goku (Namek)", "Kid Gohan DU - Cooler"],
+    },
+    "Teen Gohan": {
+        "Cell":    ["Teen Gohan DU - Tien", "Teen Gohan DU - Yamcha"],
+    },
+    "Adult Gohan": {
+        "Buu":     ["Adult Gohan DU - Vegeta", "Adult Gohan DU - Piccolo",
+                    "Adult Gohan DU - Dabura (2nd Route)", "Adult Gohan DU - Majin Vegeta",
+                    "Adult Gohan DU - Kid Buu", "Adult Gohan DU - Broly"],
+    },
+    "Vegeta": {
+        "Buu":     ["Vegeta DU - Adult Gohan", "Vegeta DU - Piccolo"],
+    },
+    "Yamcha": {
+        "Saiyan":  ["Yamcha DU - Saibamen (2nd Route)"],
+    },
+}
 CHARACTER_UNLOCK_ITEMS = {
     "Goku":        "Goku DU",
     "Kid Gohan":   "Kid Gohan DU",
@@ -115,6 +146,7 @@ CHARACTER_UNLOCK_ITEMS = {
 def create_regions(world):
     multiworld = world.multiworld
     player = world.player
+    map_helper = bool(world.options.map_helper.value)
 
     # Menu region
     menu = Region("Menu", player, multiworld)
@@ -226,6 +258,11 @@ def create_regions(world):
                 if loc_name in DU_BATTLE_LOCATIONS:
                     loc = B3Location(player, loc_name,
                                      DU_BATTLE_LOCATIONS[loc_name], region)
+                    region.locations.append(loc)
+            if map_helper:
+                for loc_name in DU_CHARACTER_SAGAS_MAP_HELPER.get(char_name, {}).get(saga_name, []):
+                    loc = B3Location(player, loc_name,
+                                     DU_BATTLE_LOCATIONS_MAP_HELPER[loc_name], region)
                     region.locations.append(loc)
 
             multiworld.regions.append(region)

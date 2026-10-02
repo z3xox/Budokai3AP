@@ -21,6 +21,8 @@ from CommonClient import (
 from NetUtils import NetworkItem, ClientStatus
 
 from .B3Interface import B3Interface, build_cave
+from .B3MapHelper import MapHelper
+from .data.MapLocations import INTERACT_BY_EVENT
 from .data.Constants import (
     FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS, DL_LOSS_CONFIRM_SECS,
     DL_ARENA_AWAY_POLLS, DU_MODE,
@@ -61,6 +63,16 @@ class B3CommandProcessor(ClientCommandProcessor):
         async_start(ctx.update_death_link(ctx.death_link))
         logger.info(f"[B3] DeathLink {'ENABLED' if ctx.death_link else 'DISABLED'} "
                     f"(overrides the YAML setting until the client is restarted).")
+
+    def _cmd_map(self, mode: str = ""):
+        """Show the map helper's state, or turn it on / off for this session: /map [on|off]"""
+        ctx: B3Context = self.ctx
+        if mode.lower() in ("on", "off"):
+            ctx._map_helper_override = (mode.lower() == "on")
+            logger.info(f"[B3] Map helper turned {mode.lower()} "
+                        f"(overrides the YAML setting until the client is restarted).")
+            return
+        logger.info(f"[B3] Map helper: {ctx.map_helper.status()}")
 
     def _cmd_restore(self):
         """Remove the code cave and pause auto-reinstall. Use /cave to reinstall."""
@@ -105,6 +117,15 @@ class B3Context(CommonContext):
         self._db_prev: dict = {}             # char -> last dragon-ball byte
         self.db_checks_sent: set = set()     # "char#bit" already sent
         self.wish_checks_sent: set = set()   # char already wished
+
+        # Item names shown in the game (map hover labels, shop list)
+        self.item_texts: dict = {}           # location name -> (item, " (player)", importance)
+
+        # Map helper state (Dragon Universe map; see B3MapHelper)
+        self.map_helper = MapHelper(self.iface.pine, logger)
+        self._map_helper_override: Optional[bool] = None   # /map wins over the YAML
+        self._map_helper_warned: bool = False
+        self.unlocked_sagas: set = set()     # saga ids (1-3) whose Saga Unlock was received
 
         # DeathLink state
         self.death_link: bool = False
@@ -501,6 +522,15 @@ class B3Context(CommonContext):
             self.da_fights_total = 380
         self.dragonsanity = bool(self.slot_data.get("dragonsanity", 0)) if self.slot_data else False
 
+        # Map helper: what it remembers (points done, chapter shown) is kept per
+        # seed and slot, next to the client's other files.
+        sd = self.slot_data or {}
+        self.map_helper.labels = bool(sd.get("map_item_labels", 1))
+        self._scout_label_locations()
+        self.map_helper.free_travel = bool(sd.get("map_free_travel", 0))
+        self.map_helper.saga_locks = bool(sd.get("saga_locks", 0))
+        self.map_helper.load_state(Utils.user_path(
+            "b3_map_helper", f"{sd.get('seed', 'seed')}_{self.slot}.json"))
         # DeathLink
         # A /deathlink toggle outranks the YAML, so reconnecting doesn't undo it.
         if self._death_link_override is not None:
@@ -603,6 +633,76 @@ class B3Context(CommonContext):
             # Traps received minus how many we've already applied to fights. See
             # _service_drain_trap.
             logger.info("[B3] HP Drain Trap received! Will apply to next fight.")
+
+    # ── Map helper ────────────────────────────────────────────────────────────
+
+    def _service_map_helper(self):
+        """Run the Dragon Universe map helper for this poll (see B3MapHelper)."""
+        if not self.slot_data:
+            return
+        wanted = bool(self.slot_data.get("map_helper", 0))
+        if self._map_helper_override is not None:
+            wanted = self._map_helper_override
+        if wanted and not MapHelper.supported(getattr(self.iface, "_crc", "")):
+            if not self._map_helper_warned:
+                self._map_helper_warned = True
+                logger.info("[B3] Map helper is not supported for this game version "
+                            "(NTSC-U only) — the map is left as the game shows it.")
+            wanted = False
+        helper = self.map_helper
+        if wanted != helper.enabled:
+            helper.set_enabled(wanted)
+            logger.info(f"[B3] Map helper {'on' if wanted else 'off'}.")
+        helper.unlocked_sagas = self.unlocked_sagas
+        helper.item_labels = self.item_texts
+        try:
+            helper.tick()
+        except ConnectionError:
+            raise
+        except Exception as e:
+            logger.debug(f"[B3] map helper error: {e}")
+        # Interactsanity: a talk scene or pickup the player just started is a check
+        # (only sent if it is a location in this seed, see _send_check).
+        while helper.visited:
+            loc_name = INTERACT_BY_EVENT.get(helper.visited.pop(0))
+            if loc_name and self.slot_data.get("interactsanity", 0):
+                asyncio.create_task(self._send_check(loc_name))
+
+    def _scout_label_locations(self):
+        """Ask the server what item is at the open checks the game can label:
+        the Dragon Universe fights and map interactions (hover labels) and the
+        shop capsules (shop list). A plain scout: it creates no hints."""
+        sd = self.slot_data or {}
+        from .Locations import location_table, DRAGON_BALL_LOCATIONS, SHOP_LOCATIONS
+        names = set()
+        if sd.get("map_helper", 0) and sd.get("map_item_labels", 1):
+            names |= (set(FIGHT_LOCATIONS.values()) | set(INTERACT_BY_EVENT.values())
+                      | set(DRAGON_BALL_LOCATIONS))
+        if sd.get("shop_item_labels", 1):
+            names |= set(SHOP_LOCATIONS)
+        loc_ids = [location_table[n] for n in names
+                   if location_table.get(n) in self.missing_locations]
+        if loc_ids:
+            asyncio.create_task(self.send_msgs([{"cmd": "LocationScouts", "locations": loc_ids,
+                                                 "create_as_hint": 0}]))
+
+    def _refresh_item_texts(self):
+        """Turn what the scout returned into label texts (for the map helper and
+        the shop): location name -> (item, " (player)", importance), open checks only."""
+        labels = {}
+        for loc_id, item in self.locations_info.items():
+            if loc_id in self.checked_locations:
+                continue
+            try:
+                loc_name = self.location_names.lookup_in_game(loc_id)
+                item_name = self.item_names.lookup_in_slot(item.item, item.player)
+                player = "" if item.player == self.slot else f" ({self.player_names[item.player]})"
+            except Exception:
+                continue
+            importance = ("trap" if item.flags & 0b100 else "progression" if item.flags & 0b001
+                          else "useful" if item.flags & 0b010 else "filler")
+            labels[loc_name] = (item_name, player, importance)
+        self.item_texts = labels
 
     # ── Matchup / cave ────────────────────────────────────────────────────────
 
@@ -1179,6 +1279,10 @@ class B3Context(CommonContext):
         if loc_id is None:
             logger.warning(f"[B3] Unknown location: {location_name}")
             return
+        if self.server_locations and loc_id not in self.server_locations:
+            # A fight that is only a location with other options (map helper).
+            logger.debug(f"[B3] {location_name} is not a location in this seed")
+            return
         if loc_id not in self.checked_locations:
             await self.send_msgs([{"cmd": "LocationChecks",
                                    "locations": [loc_id]}])
@@ -1353,6 +1457,14 @@ async def pcsx2_sync_task(ctx: B3Context):
             completed = ctx.iface.poll_completed_fights()
             for loc_name in completed:
                 await ctx._send_check(loc_name)
+
+            # What the scouted checks hold, as label texts (every ~2 s)
+            ctx._item_text_counter = getattr(ctx, "_item_text_counter", 0) + 1
+            if ctx._item_text_counter % 20 == 1:
+                ctx._refresh_item_texts()
+
+            # Dragon Universe map helper (no-op unless the option is on)
+            ctx._service_map_helper()
 
             # BL music-write path (no-op on NTSC-U / when music randomization off)
             ctx._service_music()

@@ -140,6 +140,39 @@ class Dragonsanity(Toggle):
     default = 1
 
 
+class MapHelper(Toggle):
+    """Make the Dragon Universe map show what there is to do (NTSC-U only).
+
+    Every interaction of the current chapter is on the map with a marker and a
+    coloured dot (red fight, green talk, blue battle spot, yellow item, orange
+    Dragon Ball), requirements from a second playthrough are removed, and winning
+    a saga's last fight no longer leaves the saga: purple / pink markers move
+    between chapters, a white marker goes to the next saga and a grey one back.
+
+    Also adds 28 fights as locations that are otherwise only reachable on a
+    second playthrough or an alternate route."""
+    display_name = "Map Helper"
+    default = 0
+
+
+class MapFreeTravel(Toggle):
+    """Only with Map Helper. OFF (default): the next-chapter marker only appears
+    once you have beaten the story fight that opens that chapter, and the
+    next-saga marker once you have beaten the saga's last fight, so the markers
+    are for moving around what you already reached. ON: they are always there,
+    so a story fight can be skipped."""
+    display_name = "Map Free Travel"
+    default = 0
+
+
+class MapItemLabels(DefaultOnToggle):
+    """Only with Map Helper. The name shown when you hover over a map point says
+    what is there: for an open check, the Archipelago item and who it is for,
+    coloured by importance (plum = progression, blue = useful, cyan = filler,
+    salmon = trap); for a marker, what it does. OFF: the game's place names."""
+    display_name = "Map Item Labels"
+
+
 class StartingCharacter(Choice):
     """Which Dragon Universe character you start with already unlocked. That
     character's DU unlock is precollected and removed from the item pool (since
@@ -179,4 +212,7 @@ class B3Options(PerGameCommonOptions):
     dragon_arena_fights: DragonArenaFights
     arenasanity: Arenasanity
     dragonsanity: Dragonsanity
+    map_helper: MapHelper
+    map_free_travel: MapFreeTravel
+    map_item_labels: MapItemLabels
     death_link: DeathLink
