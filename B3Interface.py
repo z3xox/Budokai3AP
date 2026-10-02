@@ -29,7 +29,7 @@ from .data.Constants import (
     SHOP_SCAN_START, SHOP_SCAN_END, SHOP_SCAN_MIN_INTERVAL,
     SHOP_OFF_DISPLAY, SHOP_OFF_RECEIVED, SHOP_OFF_PRICE, SHOP_OFF_FLAGS,
     SHOP_CAPSULE_POOL,
-    SKILL_CAPSULES, ITEM_CAPSULES,
+    SKILL_CAPSULES, ITEM_CAPSULES, EXTRA_SKILL_CAPSULES, FIGHTER_LABELS, DU_INDEX,
     RT_CAPS_BASE, DU_RT_CAPS_BASE,
     NTSC_RT_CAPS_BASE, NTSC_DU_RT_CAPS_BASE,
     SHOP_PURCHASE_BASE, SHOP_PURCHASE_BY_DISPLAY,
@@ -537,6 +537,11 @@ class B3Interface:
         self._prev_screen = -1
         self._prev_battle_states: dict = {}   # char_name → last battle state
         self._prev_ownership: Optional[bytes] = None
+        # Fighter Unlocks: None = the 27 other fighters are left alone; a set =
+        # the fighter labels ("Frieza", ...) unlocked, every other one is locked.
+        self.fighter_unlocks: Optional[set] = None
+        # Extra Skills that are items in this seed (only those are locked).
+        self.extra_skills: set = set()
         self._shop_open = False
         self._load_screen_ids({})   # defaults until a version is detected
 
@@ -1018,7 +1023,7 @@ class B3Interface:
     def grant_skill(self, skill_name: str):
         """Grant a skill capsule by writing 1 to its DU-RT and RT addresses.
         SKILL_CAPSULES holds NTSC-U addresses; translate to the active version."""
-        entry = SKILL_CAPSULES.get(skill_name)
+        entry = SKILL_CAPSULES.get(skill_name) or EXTRA_SKILL_CAPSULES.get(skill_name)
         if not entry:
             return
         du_rt, rt = entry
@@ -1090,6 +1095,14 @@ class B3Interface:
             val = 0x01 if skill_name in granted else 0x00
             self.pine.write8(du_rt + du_rt_shift, val)
             self.pine.write8(rt + rt_shift, val)
+        # Extra Skills: only the ones that are items in this seed are gated, so
+        # a skill nobody can find is left as the game has it.
+        for skill_name in self.extra_skills:
+            entry = EXTRA_SKILL_CAPSULES.get(skill_name)
+            if entry:
+                val = 0x01 if skill_name in granted else 0x00
+                self.pine.write8(entry[0] + du_rt_shift, val)
+                self.pine.write8(entry[1] + rt_shift, val)
 
     # ── Dragon Arena ──────────────────────────────────────────────────────────
 
@@ -1343,6 +1356,14 @@ class B3Interface:
                 self.pine.write8(addr, 0x00)
         # Also update cave2 lock table
         self.update_lock_table(unlocked)
+        # Fighter Unlocks: the other fighters' bytes sit in the same table, at
+        # Goku's address + the character's index. (Not covered by cave2: they
+        # are put right by this call, which the client repeats.)
+        if self.fighter_unlocks is not None and "Goku" in DU_CHAR_CAPSULES:
+            base = DU_CHAR_CAPSULES["Goku"]
+            for label, roster_name in FIGHTER_LABELS.items():
+                self.pine.write8(base + DU_INDEX.index(roster_name),
+                                 0x01 if label in self.fighter_unlocks else 0x00)
 
     def show_character(self, char_name: str):
         """Unlock a character in DU character select."""

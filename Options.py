@@ -199,6 +199,25 @@ class Interactsanity(Choice):
     default = 0
 
 
+class FighterUnlocks(DefaultOnToggle):
+    """Make the 27 fighters without a Dragon Universe of their own (Frieza, Cell,
+    Trunks, Goten, Bardock...) 'Fighter' items: they stay locked in every mode,
+    the Dragon Arena included, until found. The eleven Dragon Universe characters
+    are unlocked by their own 'DU' item, as before. OFF: those 27 are left as
+    your save has them."""
+    display_name = "Fighter Unlocks"
+
+
+class ExtraSkills(DefaultOnToggle):
+    """Add every other skill capsule in the game as items, as far as there is
+    room: the 27 other fighters' attacks, transformations and Breakthroughs, the
+    fusion forms' skills, and the Dragon Universe characters' remaining ones
+    (187 capsules). Like the other skills they can then only be obtained through
+    Archipelago. They take the place of filler and never crowd out anything
+    else; when not all fit, Breakthroughs go in first."""
+    display_name = "Extra Skills"
+
+
 class StartingCharacter(Choice):
     """Which Dragon Universe character you start with already unlocked. That
     character's DU unlock is precollected and removed from the item pool (since
@@ -243,4 +262,6 @@ class B3Options(PerGameCommonOptions):
     map_item_labels: MapItemLabels
     saga_locks: SagaLocks
     interactsanity: Interactsanity
+    fighter_unlocks: FighterUnlocks
+    extra_skills: ExtraSkills
     death_link: DeathLink

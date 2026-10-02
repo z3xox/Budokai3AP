@@ -849,6 +849,138 @@ SKILL_CAPSULES = {
     "Galick Gun (Vegeta)":            (0x4C6F5F, 0x551113),
 }
 
+# ─── Every other skill capsule ───────────────────────────────────────────────
+# Skill capsules have ids 0x01-0xCE, in blocks per character, followed by one
+# Breakthrough per character (0xCF + character). Names read from the game's
+# capsule name sheet (DATA_USA file 0xA67: label = capsule id). A capsule's
+# ownership flags sit at table base + id in both tables.
+NTSC_DU_RT_CAPSULE_ZERO = 0x004C6F39
+NTSC_RT_CAPSULE_ZERO    = 0x005510ED
+
+# Characters in the order the game numbers them once unused roster ids are
+# dropped (the "DU index"): Breakthrough capsules and the character unlock
+# bytes (DU_CHAR_CAPSULES, Goku's address + index) both follow it.
+DU_INDEX = [
+    "Goku", "Kid Goku", "Kid Gohan", "Teen Gohan", "Adult Gohan", "Great Saiyaman", "Goten",
+    "Vegeta", "Trunks", "Kid Trunks", "Krillin", "Piccolo", "Tien", "Yamcha", "Mr. Satan",
+    "Videl", "Supreme Kai", "Uub", "Raditz", "Nappa", "Ginyu", "Recoome", "Frieza",
+    "Android 16", "Android 17", "Android 18", "Dr. Gero", "Cell", "Majin Buu", "Super Buu",
+    "Kid Buu", "Dabura", "Cooler", "Bardock", "Broly", "Omega Shenron", "Saibaman", "Cell Jr.",
+]
+# Fighters without a Dragon Universe of their own: label shown to the player -> roster name.
+# (The eleven with one are unlocked by their "<name> DU" item.)
+FIGHTER_LABELS = {("Hercule" if name == "Mr. Satan" else name): name
+                  for name in DU_INDEX if name not in DU_BASES}
+# Name used in skill labels where it differs from the roster name.
+SKILL_OWNER_LABELS = {"Adult Gohan": "Gohan", "Mr. Satan": "Hercule"}
+
+# (first capsule id, owner label, skill names in id order)
+SKILL_BLOCKS = [
+    (0x01, "Goku", ["Kaioken", "Super Saiyan", "Super Saiyan 2", "Super Saiyan 3", "Super Saiyan 4",
+                    "Kamehameha", "Dragon Fist", "10X Kamehameha", "Warp Kamehameha", "Spirit Bomb",
+                    "Super Spirit Bomb", "Super Dragon Fist"]),
+    (0x0D, "Kid Goku", ["Kamehameha", "Rock-Scissors-Paper", "Super Dragon Fist"]),
+    (0x10, "Kid Gohan", ["Unlock Potential", "Masenko"]),
+    (0x12, "Teen Gohan", ["Super Saiyan", "Super Saiyan 2", "Kamehameha", "Soaring Dragon Strike",
+                          "Father-Son Kamehameha"]),
+    (0x17, "Gohan", ["Super Saiyan", "Super Saiyan 2", "Elder Kai Unlock Ability", "Kamehameha",
+                     "Soaring Dragon Strike", "Super Kamehameha"]),
+    (0x1D, "Great Saiyaman", ["Justice Punch", "Justice Kick", "Justice Pose"]),
+    (0x20, "Goten", ["Super Saiyan", "Kamehameha", "Charge"]),
+    (0x23, "Vegeta", ["Super Saiyan", "Super Saiyan 2", "Super Saiyan 4", "Galick Gun", "Atomic Blast",
+                      "Final Impact", "Final Shine Attack", "Final Flash", "Big Bang Attack",
+                      "Final Explosion"]),
+    (0x2D, "Trunks", ["Super Saiyan", "Super Saiyan 2", "Buster Cannon", "Finish Buster", "Burning Slash"]),
+    (0x32, "Kid Trunks", ["Super Saiyan", "Double Buster", "Final Cannon"]),
+    (0x35, "Krillin", ["Unlock Potential", "Kamehameha", "Destructo Disc", "Fierce Destructo Disc"]),
+    (0x39, "Piccolo", ["Sync With Nail", "Fuse With Kami", "Destructive Wave", "Light Grenade",
+                       "Special Beam Cannon", "Hellzone Grenade"]),
+    (0x3F, "Tien", ["Dodompa", "Ki Blast Cannon", "Neo Ki Blast Cannon"]),
+    (0x42, "Yamcha", ["Kamehameha", "Wolf Fang Fist", "Spirit Ball Attack"]),
+    (0x45, "Hercule", ["High Tension", "Dynamite Kick", "Rolling Hercule Punch", "Hercule Special",
+                       "Present For You"]),
+    (0x4A, "Videl", ["Eagle Kick", "Hawk Arrow", "Videl's Close Call"]),
+    (0x4D, "Supreme Kai", ["Shockwave", "Supernatural Abilities"]),
+    (0x4F, "Uub", ["Ki Cannon", "Fierce Flurry"]),
+    (0x51, "Raditz", ["Double Sunday", "Saturday Crush"]),
+    (0x53, "Nappa", ["Bomber DX", "Break Cannon", "Giant Storm"]),
+    (0x56, "Ginyu", ["Special Fighting Pose 1", "Special Fighting Pose 2", "Milky Cannon", "Strong Jersey",
+                     "Body Change", "Special Fighting Pose 3", "Special Fighting Pose 4"]),
+    (0x5D, "Recoome", ["Recoome Eraser Gun", "Recoome Kick", "Recoome Bomber"]),
+    (0x60, "Frieza", ["Second Form", "Third Form", "Final Form", "100% Full Power", "Death Beam",
+                      "Death Wave", "Death Ball"]),
+    (0x67, "Android 16", ["Rocket Punch", "Hell Flash"]),
+    (0x69, "Android 17", ["Power Blitz", "Energy Field", "Accel Dance"]),
+    (0x6C, "Android 18", ["Power Blitz", "Destructo Disc", "Accel Dance"]),
+    (0x6F, "Dr. Gero", ["Photon Wave", "Ki Blast Absorption", "Life Drain"]),
+    (0x72, "Cell", ["#17 Absorption", "Perfect Form", "Super Perfect Form", "Kamehameha", "Energy Field",
+                    "Spirit Bomb"]),
+    (0x78, "Majin Buu", ["Innocence Cannon", "Innocence Express", "Angry Explosion"]),
+    (0x7B, "Super Buu", ["Absorption", "Ill Flash", "Ill Ball Attack"]),
+    (0x7E, "Kid Buu", ["Vanishing Ball", "Kamehameha", "Warp Kamehameha"]),
+    (0x81, "Dabura", ["Demonic Will", "Hell Blitz", "Evil Blast", "Hell Blade Rush"]),
+    (0x85, "Cooler", ["Final Form", "Destructive Ray", "Sauzer Blade", "Supernova"]),
+    (0x89, "Bardock", ["Riot Javelin", "Heat Phalanx", "Spirit of Saiyans"]),
+    (0x8C, "Broly", ["Legendary Super Saiyan", "Blaster Shell", "Gigantic Press", "Gigantic Meteor"]),
+    (0x90, "Omega Shenron", ["Whirlwind Spin", "Dragon Thunder", "Minus Energy Power Ball"]),
+    (0x93, "Saibaman", ["Acid", "Self-Destruct"]),
+    (0x95, "Cell Jr.", ["Kamehameha"]),
+    # fusions and absorptions: the capsule that allows it, then the fused form's skills
+    (0x96, "Goten", ["Fusion Gotenks"]),
+    (0x97, "Goten as Gotenks", ["Super Saiyan", "Super Saiyan 3", "Kamehameha", "Charge", "Victory Cannon",
+                                "Galactica Donuts", "Super Ghost Kamikaze Attack"]),
+    (0x9E, "Kid Trunks", ["Fusion Gotenks"]),
+    (0x9F, "Kid Trunks as Gotenks", ["Super Saiyan", "Super Saiyan 3", "Double Buster", "Kamehameha",
+                                     "Final Cannon", "Victory Cannon", "Galactica Donuts",
+                                     "Super Ghost Kamikaze Attack"]),
+    (0xA7, "Goku", ["Fusion Gogeta"]),
+    (0xA8, "Goku as Gogeta", ["Kamehameha", "Soul Strike", "Soul Punisher"]),
+    (0xAB, "Vegeta", ["Fusion Gogeta"]),
+    (0xAC, "Vegeta as Gogeta", ["Galick Gun", "Soul Strike", "Soul Punisher"]),
+    (0xAF, "Goku", ["Fusion SSJ4 Gogeta"]),
+    (0xB0, "Goku as SSJ4 Gogeta", ["Super Saiyan 4", "Kamehameha", "10X Kamehameha", "Big Bang Kamehameha",
+                                   "100X Big Bang Kamehameha"]),
+    (0xB5, "Vegeta", ["Fusion SSJ4 Gogeta"]),
+    (0xB6, "Vegeta as SSJ4 Gogeta", ["Super Saiyan 4", "Galick Gun", "Final Shine Attack",
+                                     "Big Bang Kamehameha", "100X Big Bang Kamehameha"]),
+    (0xBB, "Goku", ["Potara Vegito"]),
+    (0xBC, "Goku as Vegito", ["Super Vegito", "Kamehameha", "Spirit Cannon", "Spirit Sword"]),
+    (0xC0, "Vegeta", ["Potara Vegito"]),
+    (0xC1, "Vegeta as Vegito", ["Super Vegito", "Galick Gun", "Spirit Cannon", "Spirit Sword"]),
+    (0xC5, "Supreme Kai", ["Potara Kibitoshin"]),
+    (0xC6, "Supreme Kai as Kibitoshin", ["Shockwave", "Supernatural Abilities"]),
+    (0xC8, "Super Buu with Gotenks", ["Victory Cannon", "Super Ghost Kamikaze Attack"]),
+    (0xCA, "Super Buu with Gohan", ["Kamehameha", "Super Kamehameha"]),
+    (0xCC, "Super Buu with Piccolo", ["Destructive Wave", "Light Grenade", "Special Beam Cannon"]),
+]
+
+
+def _all_skill_ids() -> dict:
+    """'<skill> (<owner>)' -> capsule id, for every skill and Breakthrough capsule."""
+    ids, expect = {}, 0x01
+    for first, owner, names in SKILL_BLOCKS:
+        assert first == expect, f"skill blocks are not contiguous at 0x{first:X}"
+        for offset, name in enumerate(names):
+            ids[f"{name} ({owner})"] = first + offset
+        expect = first + len(names)
+    assert expect == 0xCF
+    for index, char in enumerate(DU_INDEX):
+        ids[f"Breakthrough ({SKILL_OWNER_LABELS.get(char, char)})"] = 0xCF + index
+    return ids
+
+
+ALL_SKILL_IDS = _all_skill_ids()
+
+# The skills not in SKILL_CAPSULES above, in the same form: name -> (DU-RT, RT)
+# NTSC-U addresses. Items for them exist with the Extra Skills option.
+_known_skill_addrs = {du_rt for du_rt, _ in SKILL_CAPSULES.values()}
+EXTRA_SKILL_CAPSULES = {
+    name: (NTSC_DU_RT_CAPSULE_ZERO + cid, NTSC_RT_CAPSULE_ZERO + cid)
+    for name, cid in ALL_SKILL_IDS.items()
+    if NTSC_DU_RT_CAPSULE_ZERO + cid not in _known_skill_addrs
+}
+assert not set(EXTRA_SKILL_CAPSULES) & set(SKILL_CAPSULES)
+
 # ─── Dragon Arena ────────────────────────────────────────────────────────────
 SCREEN_DA_ENTRANCE = 0x0617
 SCREEN_DA_CHARSEL  = 0x0618  # fight/opponent select list

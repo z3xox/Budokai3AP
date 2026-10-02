@@ -92,6 +92,20 @@ class B3World(World):
         for name in skill_names:
             pool.append(create_item(self, name))
 
+        # Fighters and extra skills are "nice to have": they go in ahead of the
+        # generic filler but never push the pool past the number of locations.
+        from .Items import FIGHTER_ITEMS, EXTRA_SKILL_ITEMS
+        preferred = []
+        if self.options.fighter_unlocks:
+            fighters = list(FIGHTER_ITEMS)
+            self.random.shuffle(fighters)
+            preferred += fighters
+        if self.options.extra_skills:
+            breakthroughs = [n for n in EXTRA_SKILL_ITEMS if n.startswith("Skill: Breakthrough")]
+            others = [n for n in EXTRA_SKILL_ITEMS if not n.startswith("Skill: Breakthrough")]
+            self.random.shuffle(breakthroughs)
+            self.random.shuffle(others)
+            preferred += breakthroughs + others
 
         # Saga Unlocks, if sagas are locked.
         if self.options.saga_locks:
@@ -138,8 +152,14 @@ class B3World(World):
         if not filler_cycle:
             filler_cycle = zenie_names or ["Zenie x500"]
 
+        # which Extra Skills made it in: the client only locks those
+        self.extra_skills_in_pool = []
         for i in range(needed):
-            if extra_skill_copies:
+            if preferred:
+                name = preferred.pop(0)
+                if name in EXTRA_SKILL_ITEMS:
+                    self.extra_skills_in_pool.append(name[len("Skill: "):])
+            elif extra_skill_copies:
                 # Place a second skill copy first (skills less rare).
                 name = extra_skill_copies.pop()
             elif capsule_names:
@@ -231,6 +251,8 @@ class B3World(World):
             "map_item_labels":         self.options.map_item_labels.value,
             "saga_locks":              self.options.saga_locks.value,
             "interactsanity":          self.options.interactsanity.value,
+            "fighter_unlocks":         self.options.fighter_unlocks.value,
+            "extra_skills":            sorted(getattr(self, "extra_skills_in_pool", [])),
             "death_link":              self.options.death_link.value,
             "seed":               self.multiworld.seed_name,
             "starting_character": getattr(self, "starting_character", "Goku DU"),

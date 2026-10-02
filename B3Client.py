@@ -127,6 +127,9 @@ class B3Context(CommonContext):
         # Item names shown in the game (map hover labels, shop list)
         self.item_texts: dict = {}           # location name -> (item, " (player)", importance)
 
+        # Fighter Unlocks: labels of the "Fighter: X" items received
+        self.unlocked_fighters: set = set()
+
         # Map helper state (Dragon Universe map; see B3MapHelper)
         self.map_helper = MapHelper(self.iface.pine, logger)
         self._map_helper_override: Optional[bool] = None   # /map wins over the YAML
@@ -541,6 +544,10 @@ class B3Context(CommonContext):
         # Map helper: what it remembers (points done, chapter shown) is kept per
         # seed and slot, next to the client's other files.
         sd = self.slot_data or {}
+
+        # Fighter Unlocks / Extra Skills: what the interface has to keep locked
+        self.iface.fighter_unlocks = self.unlocked_fighters if sd.get("fighter_unlocks", 0) else None
+        self.iface.extra_skills = set(sd.get("extra_skills", []))
         self.map_helper.labels = bool(sd.get("map_item_labels", 1))
         self._scout_label_locations()
         self.map_helper.free_travel = bool(sd.get("map_free_travel", 0))
@@ -613,7 +620,14 @@ class B3Context(CommonContext):
             asyncio.create_task(self._maybe_send_goal())
             return
 
-        if name.endswith(" DU"):
+        if name.startswith("Fighter: "):
+            fighter = name[len("Fighter: "):]
+            self.unlocked_fighters.add(fighter)
+            if self.iface.fighter_unlocks is not None:
+                self.iface.apply_character_locks(self.unlocked_characters)
+            logger.info(f"[B3] Fighter unlocked: {fighter}")
+
+        elif name.endswith(" DU"):
             char = name[:-3]
             self.unlocked_characters.add(char)
             self.iface.show_character(char)

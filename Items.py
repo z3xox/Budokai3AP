@@ -32,6 +32,21 @@ SKILL_ITEMS = {
     for i, name in enumerate(SKILL_CAPSULES.keys())
 }
 
+# Every other skill capsule (Extra Skills option). Ids follow the capsule id, so
+# they stay put whatever is added to the tables.
+from .data.Constants import EXTRA_SKILL_CAPSULES, ALL_SKILL_IDS, FIGHTER_LABELS, DU_INDEX
+EXTRA_SKILL_ITEMS = {
+    f"Skill: {name}": B3_BASE_ID + 0x1000 + ALL_SKILL_IDS[name]
+    for name in EXTRA_SKILL_CAPSULES
+}
+
+# ─── Fighter Unlock Items (Fighter Unlocks option) ───────────────────────────
+# The fighters without a Dragon Universe of their own, usable in every mode.
+FIGHTER_ITEMS = {
+    f"Fighter: {label}": B3_BASE_ID + 0x20 + DU_INDEX.index(roster_name)
+    for label, roster_name in FIGHTER_LABELS.items()
+}
+
 CAPSULE_ITEMS = dict(SKILL_ITEMS)
 CAPSULE_ITEMS.update({
     "Zenie x500":   B3_BASE_ID + 0x110 + 0xA0,
@@ -102,6 +117,8 @@ ITEM_CAPSULE_ITEMS = {
 item_table = {}
 item_table.update(CHARACTER_ITEMS)
 item_table.update(CAPSULE_ITEMS)
+item_table.update(EXTRA_SKILL_ITEMS)
+item_table.update(FIGHTER_ITEMS)
 item_table.update(EXPERIENCE_ITEMS)
 item_table.update(TRAP_ITEMS)
 item_table.update(SPECIAL_ITEMS)
@@ -125,7 +142,7 @@ def get_item_classification(name: str) -> ItemClassification:
     # they aren't progression, but they change how a fight plays, which is
     # exactly what `useful` is for: weighted above filler and surfaced as
     # worth chasing, without entering logic.
-    if name in SKILL_ITEMS:
+    if name in SKILL_ITEMS or name in EXTRA_SKILL_ITEMS or name in FIGHTER_ITEMS:
         return ItemClassification.useful
     if name in TRAP_ITEMS:
         return ItemClassification.trap
