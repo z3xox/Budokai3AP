@@ -74,7 +74,7 @@ With `map_helper` on, the Dragon Universe map shows everything the current chapt
 - **Extra skills (up to 187)** — with `extra_skills`: every other skill capsule, placed where filler would go
 - **Shop Restock** — reveals more shop capsules
 - **Saga Unlocks (3)** — with `saga_locks`: Frieza, Cell and Buu Saga Unlock
-- **Zenie** and **Experience** bundles (filler), **HP Drain Trap** (optional). Every Dragon Universe character gets the experience you find, each when you play them; the level-ups come with the next fight you win
+- **Zenie** and **Experience** bundles (filler), **HP Drain Trap** (optional). Experience goes to the Dragon Universe character you are playing when it arrives (or the next one you play); the level-ups come with the next fight you win
 
 ## Victory
 Complete the required number of Dragon Universe campaigns.

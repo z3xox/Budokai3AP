@@ -120,10 +120,12 @@ class B3Context(CommonContext):
         self.db_checks_sent: set = set()     # "char#bit" already sent
         self.wish_checks_sent: set = set()   # char already wished
 
-        # Experience items: how much of what was received each character has been
-        # given so far (kept on disk per seed and slot, so nothing is given twice)
+        # Experience items: how much of what was received has been handed out, and
+        # to whom (kept on disk per seed and slot, so nothing is given twice)
         self._exp_state_path: Optional[str] = None
+        self._exp_handed: int = 0                    # handed out so far, to anyone
         self._exp_applied: Optional[dict] = None     # character -> amount given
+        self._exp_seen: dict = {}                    # character -> experience last read
 
         # Item names shown in the game (map hover labels, shop list)
         self.item_texts: dict = {}           # location name -> (item, " (player)", importance)
@@ -564,10 +566,13 @@ class B3Context(CommonContext):
             "b3_map_helper", f"{sd.get('seed', 'seed')}_{self.slot}_experience.json")
         try:
             with open(self._exp_state_path) as fh:
-                saved = json.load(fh).get("given", {})
-            self._exp_applied = {str(k): int(v) for k, v in saved.items()}
+                saved = json.load(fh)
+            self._exp_applied = {str(k): int(v) for k, v in saved.get("given", {}).items()}
+            self._exp_seen = {str(k): int(v) for k, v in saved.get("seen", {}).items()}
+            # (files from when every character got everything have no "handed")
+            self._exp_handed = int(saved.get("handed", max(self._exp_applied.values(), default=0)))
         except Exception:
-            self._exp_applied = {}
+            self._exp_handed, self._exp_applied, self._exp_seen = 0, {}, {}
 
         # DeathLink
         # A /deathlink toggle outranks the YAML, so reconnecting doesn't undo it.
@@ -679,8 +684,8 @@ class B3Context(CommonContext):
 
         elif name.startswith("Experience"):
             # Given out by _service_experience (to the character being played).
-            logger.info(f"[B3] {name} received — every Dragon Universe character "
-                        f"gets it when you play them.")
+            logger.info(f"[B3] {name} received — it goes to the Dragon Universe "
+                        f"character you are playing (or play next).")
 
         elif name == "HP Drain Trap":
             # No per-item increment (that would re-queue every trap on reconnect
@@ -694,13 +699,13 @@ class B3Context(CommonContext):
     def _service_experience(self):
         """Give received Experience to the Dragon Universe character being played.
 
-        Every character gets the full amount, each when it is played: experience
-        is kept per character in the game, so there is nothing to choose. Done on
-        the world map only. A character at the level cap is left alone."""
+        Each item goes to one character: the one on the world map when it
+        arrives, or the next one played. A character at the level cap is passed
+        over, so the experience waits for someone who can use it.
+
+        The character's experience is remembered from one look to the next, to
+        notice when the game takes some away."""
         if self._exp_applied is None:
-            return
-        total = self.count_experience()
-        if total <= 0:
             return
         from .data.Constants import SCREEN_WORLD_MAP
         if not self.iface.in_du() or self.iface.get_screen() != SCREEN_WORLD_MAP:
@@ -708,28 +713,39 @@ class B3Context(CommonContext):
         char = self.iface.get_active_du_char_name()
         if not char:
             return
-        given = self._exp_applied.get(char, 0)
         have = self.iface.get_du_experience(char)
         if have < 0:
             return
-        if have < given:
-            given = 0                 # less than we gave: this story was started over
-        pending = total - given
+        given = self._exp_applied.get(char, 0)       # what this character got from items
+        # The game sometimes takes experience away: a training scene that grants a
+        # level sets the total to that level's, dropping what was waiting to be
+        # turned into levels, and starting the story over sets it to 0. Whatever
+        # went missing is given again, up to what this character had from items.
+        seen = self._exp_seen.get(char)
+        lost = min(max(seen - have, 0), given) if seen is not None else 0
+        fresh = max(self.count_experience() - self._exp_handed, 0)   # not given to anyone yet
         # the game counts levels from 0: 98 is level 99, the cap
-        if pending <= 0 or not 0 <= self.iface.get_du_level(char) < 98:
+        if fresh + lost > 0 and 0 <= self.iface.get_du_level(char) < 98 \
+                and self.iface.add_du_experience(char, fresh + lost):
+            have += fresh + lost
+            self._exp_applied[char] = given + fresh
+            self._exp_handed += fresh
+            if fresh:
+                logger.info(f"[B3] {fresh} experience given to {char} — "
+                            f"the level-ups come with the next fight you win.")
+            if lost:
+                logger.info(f"[B3] {lost} experience given back to {char}: the game had dropped it.")
+        if self._exp_seen.get(char) == have:
             return
-        if not self.iface.add_du_experience(char, pending):
-            return
-        self._exp_applied[char] = total
+        self._exp_seen[char] = have
         try:
             import os
             os.makedirs(os.path.dirname(self._exp_state_path), exist_ok=True)
             with open(self._exp_state_path, "w") as fh:
-                json.dump({"given": self._exp_applied}, fh)
+                json.dump({"handed": self._exp_handed, "given": self._exp_applied,
+                           "seen": self._exp_seen}, fh)
         except Exception as e:
             logger.debug(f"[B3] could not save experience state: {e}")
-        logger.info(f"[B3] {pending} experience given to {char} — "
-                    f"the level-ups come with the next fight you win.")
 
     # ── Map helper ────────────────────────────────────────────────────────────
 
