@@ -166,6 +166,15 @@ DU_BATTLE_LOCATIONS_MAP_HELPER = {
     "Vegeta DU - Adult Gohan":                      B3_LOC_BASE + 0x155,
     "Vegeta DU - Piccolo":                          B3_LOC_BASE + 0x156,
 }
+
+# ─── Interactsanity Locations ─────────────────────────────────────────────────
+# Talk scenes and item pickups on the Dragon Universe map (Interactsanity option).
+from .data.MapLocations import INTERACT_LOCATION_OFFSETS
+
+INTERACT_LOCATIONS = {
+    name: B3_LOC_BASE + offset for name, offset in INTERACT_LOCATION_OFFSETS.items()
+}
+
 # ─── Shop Locations ───────────────────────────────────────────────────────────
 # 10 shop slots, AP controls the stock.
 
@@ -231,6 +240,7 @@ WISH_LOCATIONS = {
 location_table = {}
 location_table.update(DU_BATTLE_LOCATIONS)
 location_table.update(DU_BATTLE_LOCATIONS_MAP_HELPER)
+location_table.update(INTERACT_LOCATIONS)
 location_table.update(SHOP_LOCATIONS)
 location_table.update(DU_COMPLETION_LOCATIONS)
 location_table.update(DRAGON_ARENA_LOCATIONS)

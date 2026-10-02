@@ -193,12 +193,15 @@ class B3World(World):
         self.multiworld.push_precollected(create_item(self, starting_char))
         self.starting_character = starting_char
 
-
         # Saga Locks are enforced by the map helper (it is what keeps the player in
-        # a saga), so they cannot work without it.
-        if self.options.saga_locks and not self.options.map_helper:
-            logger.info(f"[B3] {self.player_name}: Saga Locks needs Map Helper — turning it on.")
-            self.options.map_helper.value = 1
+        # a saga), and Interactsanity relies on it to make every point reachable, so
+        # neither can work without it.
+        for option, label in ((self.options.saga_locks, "Saga Locks"),
+                              (self.options.interactsanity, "Interactsanity")):
+            if option.value and not self.options.map_helper:
+                logger.info(f"[B3] {self.player_name}: {label} needs Map Helper — turning it on.")
+                self.options.map_helper.value = 1
+
 
     def fill_slot_data(self) -> Mapping[str, Any]:
         return {
@@ -222,6 +225,7 @@ class B3World(World):
             "map_free_travel":         self.options.map_free_travel.value,
             "map_item_labels":         self.options.map_item_labels.value,
             "saga_locks":              self.options.saga_locks.value,
+            "interactsanity":          self.options.interactsanity.value,
             "death_link":              self.options.death_link.value,
             "seed":               self.multiworld.seed_name,
             "starting_character": getattr(self, "starting_character", "Goku DU"),

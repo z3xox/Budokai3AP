@@ -531,6 +531,7 @@ class B3Context(CommonContext):
         self.map_helper.saga_locks = bool(sd.get("saga_locks", 0))
         self.map_helper.load_state(Utils.user_path(
             "b3_map_helper", f"{sd.get('seed', 'seed')}_{self.slot}.json"))
+        self._resend_interact_checks()
         # DeathLink
         # A /deathlink toggle outranks the YAML, so reconnecting doesn't undo it.
         if self._death_link_override is not None:
@@ -707,6 +708,20 @@ class B3Context(CommonContext):
                           else "useful" if item.flags & 0b010 else "filler")
             labels[loc_name] = (item_name, player, importance)
         self.item_texts = labels
+
+    def _resend_interact_checks(self):
+        """Send every Interactsanity check the helper remembers as visited: covers
+        points visited while the server was not connected."""
+        if not (self.slot_data and self.slot_data.get("interactsanity", 0)):
+            return
+        from .Locations import location_table
+        for codes in self.map_helper.done.values():
+            for code in codes:
+                loc_name = INTERACT_BY_EVENT.get(code)
+                loc_id = location_table.get(loc_name)
+                if (loc_id is not None and loc_id in self.server_locations
+                        and loc_id not in self.checked_locations):
+                    asyncio.create_task(self._send_check(loc_name))
 
     # ── Matchup / cave ────────────────────────────────────────────────────────
 

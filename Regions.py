@@ -1,8 +1,10 @@
 from BaseClasses import Region, MultiWorld
+from .data.MapLocations import INTERACT_KIND, INTERACT_REGION
 from .Locations import (
     B3Location,
     DU_BATTLE_LOCATIONS,
     DU_BATTLE_LOCATIONS_MAP_HELPER,
+    INTERACT_LOCATIONS,
     SHOP_LOCATIONS,
     DU_COMPLETION_LOCATIONS,
     DRAGON_ARENA_LOCATIONS,
@@ -166,6 +168,9 @@ def create_regions(world):
     player = world.player
     map_helper = bool(world.options.map_helper.value)
     saga_locks = bool(world.options.saga_locks.value)
+    # Interactsanity: 1 = items, 2 = talks, 3 = both
+    interact_kinds = {1: {"item"}, 2: {"talk"}, 3: {"item", "talk"}}.get(
+        int(world.options.interactsanity.value), set())
 
     def has_all(items):
         """Access rule: every item of `items` is held (items may be empty)."""
@@ -299,6 +304,10 @@ def create_regions(world):
                     loc = B3Location(player, loc_name,
                                      DU_BATTLE_LOCATIONS_MAP_HELPER[loc_name], region)
                     region.locations.append(loc)
+            for loc_name, loc_id in INTERACT_LOCATIONS.items():
+                if (INTERACT_KIND[loc_name] in interact_kinds
+                        and INTERACT_REGION[loc_name] == (char_name, saga_name)):
+                    region.locations.append(B3Location(player, loc_name, loc_id, region))
 
             multiworld.regions.append(region)
 

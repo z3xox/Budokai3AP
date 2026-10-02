@@ -181,6 +181,24 @@ class SagaLocks(Toggle):
     default = 0
 
 
+class Interactsanity(Choice):
+    """Make the other interaction points of the Dragon Universe map locations:
+    visiting one sends its check. Battle spots (blue) are never included, and
+    fights and Dragon Balls are locations of their own.
+      off   = none
+      items = item pickups, the yellow dots (204)
+      talks = talk scenes, the green dots (312)
+      both  = items and talks (516)
+    Needs Map Helper (turned on automatically): many of these points are hidden
+    or need a second playthrough without it."""
+    display_name = "Interactsanity"
+    option_off = 0
+    option_items = 1
+    option_talks = 2
+    option_both = 3
+    default = 0
+
+
 class StartingCharacter(Choice):
     """Which Dragon Universe character you start with already unlocked. That
     character's DU unlock is precollected and removed from the item pool (since
@@ -224,4 +242,5 @@ class B3Options(PerGameCommonOptions):
     map_free_travel: MapFreeTravel
     map_item_labels: MapItemLabels
     saga_locks: SagaLocks
+    interactsanity: Interactsanity
     death_link: DeathLink
