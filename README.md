@@ -8,7 +8,7 @@ Dragon Universe fights, the Skill Shop, character unlocks, and skill capsules be
 
 ## Requirements
 - PCSX2 with **PINE** enabled
-- DBZ Budokai 3 (Greatest Hits, CRC `c97ef0a4`)
+- DBZ Budokai 3, NTSC-U: Greatest Hits (CRC `c97ef0a4`) or Black Label (CRC `2a4b60eb`)
 
 ## Setup
 1. Drop `budokai3.apworld` into Archipelago's `custom_worlds/`.
@@ -57,7 +57,7 @@ With `map_helper` on, the Dragon Universe map shows everything the current chapt
 - Winning the story's last fight no longer ends the Dragon Universe either: a **white** marker appears that plays the ending when you want to finish.
 - Requirements from a second playthrough are removed, so every route's fights are on the map.
 - `/map` in the client shows its state; `/map off` and `/map on` switch it for the session.
-- Greatest Hits / NTSC-U (CRC `c97ef0a4`) only.
+- Works on Greatest Hits (CRC `c97ef0a4`) and Black Label (CRC `2a4b60eb`). Black Label has no Cooler-route Frieza fight for Goku; that check is sent together with `Goku DU - Frieza Final Form`.
 
 ## Checks
 - **DU fights (100, or 128 with `map_helper`)** — win a fight = a check (Goku, Vegeta, Piccolo, Krillin, Tien, Broly, the Gohans, Uub, Yamcha)
@@ -80,8 +80,7 @@ With `map_helper` on, the Dragon Universe map shows everything the current chapt
 Complete the required number of Dragon Universe campaigns.
 
 ## Known limitations
-- Saga locks and the map helper only work on the NTSC-U version (CRC `c97ef0a4`)
 - Some unlocks need one normal in-game save to persist into menus
 
 ## Troubleshooting
-- *Client can't find game* → check PCSX2 is running Budokai 3 (CRC `c97ef0a4`) with PINE enabled
+- *Client can't find game* → check PCSX2 is running Budokai 3 (CRC `c97ef0a4` or `2a4b60eb`) with PINE enabled

@@ -1302,9 +1302,11 @@ ITEM_CAPSULES = {
 }
 
 
-# ─── Map Helper (NTSC-U only) ────────────────────────────────────────────────
-# Addresses the Dragon Universe map helper (B3MapHelper.py) works with. They are
-# only known for NTSC-U, so the helper stays off on any other version.
+# ─── Map Helper ──────────────────────────────────────────────────────────────
+# Addresses the Dragon Universe map helper (B3MapHelper.py) works with. The ones
+# below are for Greatest Hits (CRC c97ef0a4); MAP_VERSIONS at the end of this
+# section has them for every version the helper supports, and the helper stays
+# off on any other.
 MAP_HELPER_CRC      = "c97ef0a4"
 
 # The world map keeps its interaction points in a table of 64 entries x 0x40 bytes:
@@ -1378,9 +1380,58 @@ MAP_DOT_PALETTE   = [0x7A01015C, 0x7002035C, 0x6A000163, 0x6803045D, 0x63070758,
 # table is the way to find the live one.
 ADDR_FILE_TABLE    = 0x00599200
 FILE_TABLE_END     = 0x0059C200
+ADDR_FILE_TABLE_PTR = 0x004285C0  # -> the table's first entry (the entry count is the word before)
+FILE_TABLE_ENTRIES = 128
+FILE_ENTRY_SIZE    = 0x5C
 FILE_ENTRY_POINTER = 0x10
 FILE_ENTRY_STATE   = 0x14
 FILE_LOADED        = 3
 # DATA_USA files holding the capsule names as images (image number = capsule
 # display id): the Skill Shop's list uses one, its highlighted row the other.
 SHOP_NAME_FILES    = (0xA67, 0xA7C)
+
+
+# ─── Map helper and labels, per game version ─────────────────────────────────
+# Black Label is the same engine built separately: the routines and tables are
+# all there, at other addresses, and the structures are laid out the same. Its
+# addresses were found by lining the two program files up routine by routine.
+# Its data differs too (points moved, a fight missing), so it has its own point
+# lists; the name images are the same files under other numbers.
+MAP_VERSIONS = {
+    "c97ef0a4": {                                   # Greatest Hits
+        "points":         "MapData",
+        "map_ptr":        ADDR_MAP_PTR,
+        "hud_ptr":        ADDR_MAP_HUD_PTR,
+        "event_task":     ADDR_EVENT_TASK,
+        "event_pending":  ADDR_EVENT_PENDING,
+        "patch_marker":   MAP_PATCH_MARKER,
+        "patch_minimap":  MAP_PATCH_MINIMAP,
+        "dot_draw":       ADDR_MAP_DOT_DRAW,
+        "orig_dot_draw":  ORIG_MAP_DOT_DRAW,
+        "dot_fn":         ADDR_MAP_DOT_FN,
+        "dot_cave":       ADDR_MAP_DOT_CAVE,
+        "dot_table":      ADDR_MAP_DOT_TABLE,
+        "file_table_ptr": ADDR_FILE_TABLE_PTR,
+        "shop_name_files": SHOP_NAME_FILES,
+        "missing_fights": {},
+    },
+    "2a4b60eb": {                                   # Black Label
+        "points":         "MapDataBL",
+        "map_ptr":        0x005AA604,
+        "hud_ptr":        0x004708B4,
+        "event_task":     0x004708D0,
+        "event_pending":  0x004700A0,
+        "patch_marker":   (0x002904F8, 0x30630E00, 0x24030400),
+        "patch_minimap":  ((0x00299E48, 0x8E620004, 0x8E620000),
+                           (0x00299E4C, 0x304200C0, 0x30428000)),
+        "dot_draw":       0x00299EB4,               # jal 0x22C560
+        "orig_dot_draw":  0x0C08B158,
+        "dot_fn":         0x0022C560,
+        "dot_cave":       0x00824800,               # past the client's other caves (0x800000-0x823FFF)
+        "dot_table":      0x00824900,
+        "file_table_ptr": 0x00470780,
+        "shop_name_files": (0xA9C, 0xAB1),
+        # A location this version has no fight for -> the check it is sent with.
+        "missing_fights": {"Goku DU - Frieza Final Form (Cooler Route)": "Goku DU - Frieza Final Form"},
+    },
+}

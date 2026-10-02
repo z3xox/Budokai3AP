@@ -124,6 +124,7 @@ class B3Context(CommonContext):
         # to whom (kept on disk per seed and slot, so nothing is given twice)
         self._exp_state_path: Optional[str] = None
         self._exp_handed: int = 0                    # handed out so far, to anyone
+        self._missing_sent: set = set()              # fights this version lacks, already sent
         self._exp_applied: Optional[dict] = None     # character -> amount given
         self._exp_seen: dict = {}                    # character -> experience last read
 
@@ -756,13 +757,17 @@ class B3Context(CommonContext):
         wanted = bool(self.slot_data.get("map_helper", 0))
         if self._map_helper_override is not None:
             wanted = self._map_helper_override
-        if wanted and not MapHelper.supported(getattr(self.iface, "_crc", "")):
+        crc = getattr(self.iface, "_crc", "")
+        if wanted and not MapHelper.supported(crc):
             if not self._map_helper_warned:
                 self._map_helper_warned = True
                 logger.info("[B3] Map helper is not supported for this game version "
-                            "(NTSC-U only) — the map is left as the game shows it.")
+                            "— the map is left as the game shows it.")
             wanted = False
         helper = self.map_helper
+        if wanted:
+            helper.set_version(crc)
+            self._send_missing_fights(crc)
         if wanted != helper.enabled:
             helper.set_enabled(wanted)
             logger.info(f"[B3] Map helper {'on' if wanted else 'off'}.")
@@ -817,11 +822,27 @@ class B3Context(CommonContext):
             labels[loc_name] = (item_name, player, importance)
         self.item_texts = labels
 
+    def _send_missing_fights(self, crc: str):
+        """A fight this game version does not have is sent along with the check
+        it is paired with (Black Label has no Cooler-route Frieza fight)."""
+        from .Locations import location_table
+        from .data.Constants import MAP_VERSIONS
+        for missing, paired in MAP_VERSIONS[crc]["missing_fights"].items():
+            if (location_table.get(paired) in self.checked_locations
+                    and location_table.get(missing) in self.server_locations
+                    and location_table.get(missing) not in self.checked_locations
+                    and missing not in self._missing_sent):
+                self._missing_sent.add(missing)
+                asyncio.create_task(self._send_check(missing))
+
     def _service_shop_labels(self, on_shop: bool):
         """Show the Archipelago items in the Skill Shop's list (see B3ShopLabels)."""
         labels = self.shop_labels
+        crc = getattr(self.iface, "_crc", "")
         wanted = bool(self.slot_data and self.slot_data.get("shop_item_labels", 1)
-                      and MapHelper.supported(getattr(self.iface, "_crc", "")))
+                      and labels.supported(crc))
+        if wanted:
+            labels.set_version(crc)
         if not (wanted and on_shop):
             if self._shop_labels_open:
                 self._shop_labels_open = False

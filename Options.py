@@ -151,7 +151,7 @@ class Dragonsanity(Choice):
 
 
 class MapHelper(Toggle):
-    """Make the Dragon Universe map show what there is to do (NTSC-U only).
+    """Make the Dragon Universe map show what there is to do.
 
     Every interaction of the current chapter is on the map with a marker and a
     coloured dot (red fight, green talk, blue battle spot, yellow item, orange
@@ -186,7 +186,7 @@ class MapItemLabels(DefaultOnToggle):
 class ShopItemLabels(DefaultOnToggle):
     """The Skill Shop's list shows the Archipelago item each capsule sends, and
     who it is for, in place of the capsule's own name (same colours as the map
-    labels). OFF: the capsules keep their names. NTSC-U only."""
+    labels). OFF: the capsules keep their names."""
     display_name = "Shop Item Labels"
 
 

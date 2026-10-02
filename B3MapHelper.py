@@ -18,8 +18,9 @@ fight is won. With the helper on, the client owns the map instead:
   * the name shown when hovering over a point says what is there: the
     Archipelago item of an open check, or what a marker does (see B3Labels)
 
-Point lists come from data/MapData.py (generated from the game files). NTSC-U
-only: none of the addresses are known for other versions.
+Point lists come from data/MapData.py and data/MapDataBL.py (generated from the
+game files), one per supported game version; the addresses for each version are
+in MAP_VERSIONS (data/Constants.py). On any other version the helper stays off.
 """
 import json
 import math
@@ -32,16 +33,15 @@ from typing import Optional
 from .data.Constants import (
     DU_BASES, DU_MODE, ADDR_MODE, ADDR_DU_CHAR, ADDR_SCREEN, OFFSET_SAGA, OFFSET_DRAGONBALLS,
     SCREEN_WORLD_MAP, SCREEN_DU_BATTLE, SCREEN_RESULTS_WIN,
-    MAP_HELPER_CRC, ADDR_MAP_PTR, MAP_POINTS_OFF, MAP_POINT_COUNT, MAP_POINT_SIZE,
-    MAP_POINT_REQ_CAPSULE, MAP_POINT_REQ_EQUIPPED, MAP_POINT_LEVEL_MIN, MAP_POINT_DONE, ADDR_MAP_HUD_PTR,
-    ADDR_EVENT_TASK, ADDR_EVENT_PENDING, OFFSET_EVENT_QUEUED, SAGA_EVENT_CLASSES,
+    MAP_HELPER_CRC, MAP_VERSIONS, VERSIONS, MAP_POINTS_OFF, MAP_POINT_COUNT, MAP_POINT_SIZE,
+    MAP_POINT_REQ_CAPSULE, MAP_POINT_REQ_EQUIPPED, MAP_POINT_LEVEL_MIN, MAP_POINT_DONE,
+    OFFSET_EVENT_QUEUED, SAGA_EVENT_CLASSES,
     ENDING_EVENT_CLASSES,
-    MAP_PATCH_MARKER, MAP_PATCH_MINIMAP, ADDR_MAP_DOT_DRAW, ORIG_MAP_DOT_DRAW,
-    ADDR_MAP_DOT_FN, ADDR_MAP_DOT_CAVE, ADDR_MAP_DOT_TABLE, MAP_DOT_TEXTURE,
+    MAP_DOT_TEXTURE,
     MAP_DOT_PALETTE, SAGA_UNLOCK_IDS, FIGHT_LOCATIONS,
     MAP_HUD_LABELS, MAP_LABEL_FIRST, MAP_POINT_TYPE, MAP_PLAYER_POS,
 )
-from .data.MapData import SAGA_POINTS
+from .data import MapData, MapDataBL
 from .data.MapLocations import INTERACT_BY_EVENT, CHAR_NAMES, place_name
 from . import B3Labels
 
@@ -262,8 +262,8 @@ class MapHelper:
                                       # what is at each open check (filled by the client)
         self.visited = []             # events the player just started (the client turns
                                       # them into Interactsanity checks and empties the list)
-        self._du_base = {info["du_id"]: info["base"] for info in DU_BASES.values()}
         self._sagas = {}
+        self.set_version(MAP_HELPER_CRC)
         self._reset_state()
         self._reset_session()
         self._patched = False
@@ -272,7 +272,24 @@ class MapHelper:
 
     @staticmethod
     def supported(crc: str) -> bool:
-        return (crc or "").lower() == MAP_HELPER_CRC
+        return (crc or "").lower() in MAP_VERSIONS
+
+    def set_version(self, crc: str):
+        """Use the addresses and point lists of the game version `crc` (one that
+        supported() accepts)."""
+        crc = (crc or "").lower()
+        if getattr(self, "crc", None) == crc:
+            return
+        game = VERSIONS[crc]
+        self.crc = crc
+        self.v = MAP_VERSIONS[crc]
+        self.points = {"MapData": MapData, "MapDataBL": MapDataBL}[self.v["points"]].SAGA_POINTS
+        self._addr_mode = game.get("addr_mode", ADDR_MODE)
+        self._addr_du_char = game.get("addr_du_char", ADDR_DU_CHAR)
+        self._addr_screen = game.get("addr_screen", ADDR_SCREEN)
+        self._du_base = {info["du_id"]: info["base"]
+                         for info in game.get("du_bases", DU_BASES).values()}
+        self._sagas = {}
 
     def _reset_state(self):
         self.done = {}             # char id -> event codes done
@@ -332,7 +349,7 @@ class MapHelper:
             self.logger.debug(f"[B3] Map helper: could not save state: {e}")
 
     def _saga(self, char_id: int, block) -> Optional[Saga]:
-        sagas = SAGA_POINTS.get(char_id)
+        sagas = self.points.get(char_id)
         if sagas is None or block not in sagas:
             return None
         if (char_id, block) not in self._sagas:
@@ -356,14 +373,14 @@ class MapHelper:
         the table into the dot instance, then tail-calls the real draw."""
         return [
             0x00144100,                                    # sll  t0,s4,4
-            0x3C090000 | (ADDR_MAP_DOT_TABLE >> 16),       # lui  t1,hi(table)
-            0x35290000 | (ADDR_MAP_DOT_TABLE & 0xFFFF),    # ori  t1,t1,lo(table)
+            0x3C090000 | (self.v["dot_table"] >> 16),       # lui  t1,hi(table)
+            0x35290000 | (self.v["dot_table"] & 0xFFFF),    # ori  t1,t1,lo(table)
             0x01094021,                                    # addu t0,t0,t1
             0x8C890030,                                    # lw   t1,0x30(a0)    ; dot instance
             0x8D0A0000, 0xAD2A0050,                        # r -> instance+0x50
             0x8D0A0004, 0xAD2A0054,                        # g -> instance+0x54
             0x8D0A0008,                                    # lw   t2,8(t0)
-            0x08000000 | ((ADDR_MAP_DOT_FN >> 2) & 0x03FFFFFF),   # j draw
+            0x08000000 | ((self.v["dot_fn"] >> 2) & 0x03FFFFFF),   # j draw
             0xAD2A0058,                                    # b -> instance+0x58 (delay slot)
         ]
 
@@ -372,23 +389,23 @@ class MapHelper:
         or a reload puts the original code back."""
         p = self.pine
         cave = self._dot_cave()
-        sites = [MAP_PATCH_MARKER, *MAP_PATCH_MINIMAP]
-        addrs = ([a for a, _, _ in sites] + [ADDR_MAP_DOT_DRAW]
-                 + [ADDR_MAP_DOT_CAVE + 4 * i for i in range(len(cave))])
+        sites = [self.v["patch_marker"], *self.v["patch_minimap"]]
+        addrs = ([a for a, _, _ in sites] + [self.v["dot_draw"]]
+                 + [self.v["dot_cave"] + 4 * i for i in range(len(cave))])
         now = p.read32_many(addrs)
         for (addr, orig, new), cur in zip(sites, now):
             if cur == orig:
                 p.write32(addr, new)
             elif cur != new:
                 return False                               # not the code we expect: leave it all alone
-        hook = 0x0C000000 | (ADDR_MAP_DOT_CAVE >> 2)       # jal cave
-        if now[len(sites)] not in (ORIG_MAP_DOT_DRAW, hook):
+        hook = 0x0C000000 | (self.v["dot_cave"] >> 2)       # jal cave
+        if now[len(sites)] not in (self.v["orig_dot_draw"], hook):
             return False
         for i, word in enumerate(cave):
             if now[len(sites) + 1 + i] != word:
-                p.write32(ADDR_MAP_DOT_CAVE + 4 * i, word)
+                p.write32(self.v["dot_cave"] + 4 * i, word)
         if now[len(sites)] != hook:
-            p.write32(ADDR_MAP_DOT_DRAW, hook)
+            p.write32(self.v["dot_draw"], hook)
         self._patched = True
         return True
 
@@ -400,11 +417,11 @@ class MapHelper:
             return
         self._patched = False
         try:
-            for addr, orig, new in (MAP_PATCH_MARKER, *MAP_PATCH_MINIMAP):
+            for addr, orig, new in (self.v["patch_marker"], *self.v["patch_minimap"]):
                 if self.pine.read32(addr) == new:
                     self.pine.write32(addr, orig)
-            if self.pine.read32(ADDR_MAP_DOT_DRAW) != ORIG_MAP_DOT_DRAW:
-                self.pine.write32(ADDR_MAP_DOT_DRAW, ORIG_MAP_DOT_DRAW)
+            if self.pine.read32(self.v["dot_draw"]) != self.v["orig_dot_draw"]:
+                self.pine.write32(self.v["dot_draw"], self.v["orig_dot_draw"])
             self._set_palette(grey=False)
             self._restore_label()
         except Exception:
@@ -419,7 +436,7 @@ class MapHelper:
     def _set_palette(self, grey: bool):
         """The dot texture is red; made grey, the per-dot colour tints it."""
         p = self.pine
-        hud = p.read32(ADDR_MAP_HUD_PTR)
+        hud = p.read32(self.v["hud_ptr"])
         if not is_pointer(hud):
             return
         sheet = p.read32(hud + 0x64)
@@ -446,7 +463,7 @@ class MapHelper:
             words = tuple(f2w(v) for v in DOT_COLORS[kind])
             if self._colors.get(slot) != words:
                 for j, word in enumerate(words):
-                    self.pine.write32(ADDR_MAP_DOT_TABLE + 16 * slot + 4 * j, word)
+                    self.pine.write32(self.v["dot_table"] + 16 * slot + 4 * j, word)
                 self._colors[slot] = words
 
     # ── Hover labels ─────────────────────────────────────────────────────────
@@ -458,7 +475,7 @@ class MapHelper:
         """Find the label image to draw into: dict(type, width, height, data, size,
         palette), or None when no usable sheet is loaded."""
         p = self.pine
-        hud = p.read32(ADDR_MAP_HUD_PTR)
+        hud = p.read32(self.v["hud_ptr"])
         sheet = p.read32(hud + MAP_HUD_LABELS) if is_pointer(hud) else 0
         if not is_pointer(sheet):
             return None
@@ -553,7 +570,7 @@ class MapHelper:
         """Put the game's own label image back."""
         if self._label and self._label_backup:
             words, palette = self._label_backup
-            hud = self.pine.read32(ADDR_MAP_HUD_PTR)
+            hud = self.pine.read32(self.v["hud_ptr"])
             if is_pointer(hud) and self.pine.read32(hud + MAP_HUD_LABELS) == self._label["sheet"]:
                 self.pine.write32_many(
                     [(self._label["data"] + 4 * i, w) for i, w in enumerate(words)]
@@ -567,12 +584,12 @@ class MapHelper:
         if not self.enabled:
             return
         p = self.pine
-        if p.read8(ADDR_MODE) != DU_MODE:
+        if p.read8(self._addr_mode) != DU_MODE:
             if self._key is not None:
                 self.release()
                 self._reset_session()
             return
-        char_id = p.read8(ADDR_DU_CHAR)
+        char_id = p.read8(self._addr_du_char)
         du = self._du_base.get(char_id)
         saga = None
         if du is not None:
@@ -591,14 +608,14 @@ class MapHelper:
                              f"({len(saga.points)} points, {saga.chapters} chapters)")
         done = self.done.setdefault(char_id, set())
         chapter = min(self.chapter_at.get(saga.key, 0), saga.chapters - 1)
-        screen = p.read16(ADDR_SCREEN)
+        screen = p.read16(self._addr_screen)
         if screen == SCREEN_RESULTS_WIN:
             self._after_win = True
         elif screen == SCREEN_DU_BATTLE:
             self._after_win = False
 
         # what is running right now
-        task = p.read32(ADDR_EVENT_TASK)
+        task = p.read32(self.v["event_task"])
         event = p.read32(task + 0x14) if is_pointer(task) else None
         if event is not None and event != self._last_event:
             chapter = self._on_event(saga, event, chapter, done)
@@ -608,13 +625,13 @@ class MapHelper:
 
         # own the map, but only once it has been idle for a moment
         if (screen != SCREEN_WORLD_MAP or event is not None or self._leaving
-                or p.read32(ADDR_EVENT_PENDING) != NONE):      # something is about to run
+                or p.read32(self.v["event_pending"]) != NONE):      # something is about to run
             self._quiet = 0
             return
         self._quiet += 1
         if self._quiet < SETTLE_TICKS:
             return
-        base = p.read32(ADDR_MAP_PTR)
+        base = p.read32(self.v["map_ptr"])
         if not is_pointer(base):
             return
         if self._quiet % SETTLE_TICKS:
@@ -642,7 +659,7 @@ class MapHelper:
             if event not in done:
                 done.add(event)
                 self.save_state()
-        first_block = min(SAGA_POINTS[char_id])
+        first_block = min(self.points[char_id])
         exit_shown = saga.exit_target is not None and chapter == saga.chapters - 1
         going_back = (saga.previous and chapter == 0 and event == saga.previous[0]
                       and not (exit_shown and event == saga.exit))
@@ -651,7 +668,7 @@ class MapHelper:
             # session: a new game. Forget what was done in the last run.
             self.done[char_id] = set()
             done.clear()
-            for block in SAGA_POINTS[char_id]:
+            for block in self.points[char_id]:
                 k = f"{char_id}:{block}"
                 self.chapter_at.pop(k, None)
                 self.reached.pop(k, None)
@@ -721,7 +738,7 @@ class MapHelper:
         left alone (a new game queues it to set the map up). The story's ending
         is held the same way, until the ending marker is used."""
         p = self.pine
-        addrs = [ADDR_EVENT_PENDING] + [du + off for off in OFFSET_EVENT_QUEUED]
+        addrs = [self.v["event_pending"]] + [du + off for off in OFFSET_EVENT_QUEUED]
         for addr, code in zip(addrs, p.read32_many(addrs)):
             if code == NONE:
                 continue

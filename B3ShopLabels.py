@@ -21,8 +21,8 @@ from logging import Logger
 
 from . import B3Labels
 from .data.Constants import (
-    ADDR_FILE_TABLE, FILE_TABLE_END, FILE_ENTRY_POINTER, FILE_ENTRY_STATE, FILE_LOADED,
-    SHOP_NAME_FILES,
+    MAP_HELPER_CRC, MAP_VERSIONS, FILE_TABLE_ENTRIES, FILE_ENTRY_SIZE, FILE_ENTRY_POINTER,
+    FILE_ENTRY_STATE, FILE_LOADED,
 )
 
 AMT_MAGICS = (0x544D4123, 0x544D4121)        # '#AMT' as stored, '!AMT' once loaded
@@ -57,17 +57,31 @@ class ShopLabels:
         self.logger = logger
         self.enabled = True
         self._sheets = {}          # address -> Sheet
+        self.set_version(MAP_HELPER_CRC)
+
+    @staticmethod
+    def supported(crc: str) -> bool:
+        return (crc or "").lower() in MAP_VERSIONS
+
+    def set_version(self, crc: str):
+        """Use the file table and file numbers of the game version `crc`."""
+        version = MAP_VERSIONS[(crc or "").lower()]
+        self._table_ptr = version["file_table_ptr"]
+        self._name_files = version["shop_name_files"]
 
     # ── Finding the sheets ───────────────────────────────────────────────────
 
     def _loaded_sheets(self) -> list:
         """Addresses of the capsule name sheets the game has finished loading."""
-        addrs = list(range(ADDR_FILE_TABLE, FILE_TABLE_END, 4))
+        table = self.pine.read32(self._table_ptr)
+        if not is_pointer(table):
+            return []
+        addrs = list(range(table, table + FILE_TABLE_ENTRIES * FILE_ENTRY_SIZE, 4))
         words = self.pine.read32_many(addrs)
         pointer, state = FILE_ENTRY_POINTER // 4, FILE_ENTRY_STATE // 4
         found = []
         for i in range(1, len(words) - state):
-            if (words[i] in SHOP_NAME_FILES and words[i - 1] == 1      # an entry in use
+            if (words[i] in self._name_files and words[i - 1] == 1     # an entry in use
                     and words[i + state] == FILE_LOADED and is_pointer(words[i + pointer])):
                 found.append(words[i + pointer])
         return found
