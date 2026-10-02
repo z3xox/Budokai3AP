@@ -240,7 +240,7 @@ def create_regions(world):
     # Dragon Balls & Wishes (dragonsanity) — gated behind the matching character
     dragonsanity = False
     try:
-        dragonsanity = bool(int(world.options.dragonsanity.value))
+        dragonsanity = int(world.options.dragonsanity.value)   # 1 = balls + wishes, 2 = wishes
     except Exception:
         pass
     if dragonsanity:
@@ -253,7 +253,8 @@ def create_regions(world):
             "Uub": "Uub DU", "Broly": "Broly DU",
         }
         db_region = Region("Dragon Balls", player, multiworld)
-        for name, loc_id in {**DRAGON_BALL_LOCATIONS, **WISH_LOCATIONS}.items():
+        ball_locations = DRAGON_BALL_LOCATIONS if dragonsanity == 1 else {}
+        for name, loc_id in {**ball_locations, **WISH_LOCATIONS}.items():
             # Extract the character from the location name
             if name.startswith("Dragon Ball: "):
                 ch = name[len("Dragon Ball: "):].rsplit(" #", 1)[0]

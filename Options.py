@@ -133,10 +133,20 @@ class Arenasanity(Toggle):
     default = 0
 
 
-class Dragonsanity(Toggle):
-    """Add Dragon Ball collection (7 per DU character = 77) and Shenron wishes
-    (1 per character = 11) as checks. Enabled by default."""
+class Dragonsanity(Choice):
+    """Checks from the Dragon Balls.
+      off    = none
+      wishes = each character's Shenron wish is a check (11). Picking up a
+               Dragon Ball just gives the Dragon Ball.
+      all    = every Dragon Ball picked up is a check as well (7 per character
+               = 77), so a pickup gives the ball and an Archipelago item (default)
+    """
     display_name = "Dragonsanity"
+    option_off = 0
+    option_all = 1
+    option_wishes = 2
+    alias_false = 0
+    alias_true = 1
     default = 1
 
 

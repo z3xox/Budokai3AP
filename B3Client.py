@@ -1048,7 +1048,10 @@ class B3Context(CommonContext):
             return
 
         from .data.Constants import DRAGON_BALL_ADDRS
-        # Dragon Balls: watch each character's bitfield for bits going 0->1.
+        # Dragon Balls: watch how many each character holds. The game hands out
+        # a RANDOM missing ball on every pickup (routine 0x2A85B0 picks one of the
+        # unset bits), so a ball's number says nothing about where it was found:
+        # the n-th ball a character collects is check #n.
         self._db_scan_counter = getattr(self, "_db_scan_counter", 0) + 1
         if self._db_scan_counter >= 10:
             self._db_scan_counter = 0
@@ -1067,16 +1070,14 @@ class B3Context(CommonContext):
                 if prev is None:
                     self._db_prev[ch] = cur
                     continue
-                for bit in range(7):
-                    mask = 1 << bit
-                    key = f"{ch}#{bit}"
-                    if key in self.db_checks_sent:
-                        continue
-                    now_set = bool(cur & mask)
-                    was_set = bool(prev & mask)
-                    if now_set and not was_set:  # genuine 0->1 we observed
+                have, had = bin(cur).count("1"), bin(prev).count("1")
+                if have > had:                   # a pickup we observed
+                    for n in range(have):
+                        key = f"{ch}#{n}"
+                        if key in self.db_checks_sent:
+                            continue
                         self.db_checks_sent.add(key)
-                        loc_name = f"Dragon Ball: {ch} #{bit + 1}"
+                        loc_name = f"Dragon Ball: {ch} #{n + 1}"
                         asyncio.create_task(self._send_check(loc_name))
                         logger.info(f"[B3] {loc_name}")
                 self._db_prev[ch] = cur
