@@ -1349,6 +1349,7 @@ MAP_HELPER_CRC      = "c97ef0a4"
 #   +0x00 event code ((class << 16) | id; -1 = free; bit 0x8000 of the id = done)
 #   +0x04 flags   +0x08 location type   +0x0C radius (float)
 #   +0x10 x, y, z, w (floats)
+#   +0x20 / +0x24 / +0x28 a condition on a variable for the point to show (-1 = none)
 #   +0x2C required equipped capsule   +0x30 required owned capsule (-1 = none)
 #   +0x34 / +0x38 level range (-1 / 100 = no limit)
 ADDR_MAP_PTR          = 0x0055ECC4   # -> world map struct (0 when no map is loaded)
@@ -1357,6 +1358,10 @@ MAP_POINT_COUNT       = 64
 MAP_POINT_SIZE        = 0x40
 MAP_POINT_REQ_CAPSULE = 0x30
 MAP_POINT_REQ_EQUIPPED = 0x2C        # capsule that has to be equipped (script tag 0x22)
+MAP_POINT_CONDITION   = 0x20         # shown only while a variable compares true (script tag 0x1F):
+                                     # +0x20 variable (-1 = none; top 4 bits: where it lives,
+                                     # 2 = a word of the map struct), +0x24 comparison
+                                     # (0 ==, 1 !=, ...), +0x28 value
 MAP_POINT_LEVEL_MIN   = 0x34         # level max follows at +0x38
 MAP_POINT_DONE        = 0x8000
 ADDR_MAP_HUD_PTR      = 0x00428464   # -> map HUD struct; its texture sheet at +0x64

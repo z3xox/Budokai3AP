@@ -34,7 +34,7 @@ from .data.Constants import (
     DU_BASES, DU_MODE, ADDR_MODE, ADDR_DU_CHAR, ADDR_SCREEN, OFFSET_SAGA, OFFSET_DRAGONBALLS,
     SCREEN_WORLD_MAP, SCREEN_DU_BATTLE, SCREEN_RESULTS_WIN,
     MAP_HELPER_CRC, MAP_VERSIONS, VERSIONS, MAP_POINTS_OFF, MAP_POINT_COUNT, MAP_POINT_SIZE,
-    MAP_POINT_REQ_CAPSULE, MAP_POINT_REQ_EQUIPPED, MAP_POINT_LEVEL_MIN, MAP_POINT_DONE,
+    MAP_POINT_REQ_CAPSULE, MAP_POINT_REQ_EQUIPPED, MAP_POINT_CONDITION, MAP_POINT_LEVEL_MIN, MAP_POINT_DONE,
     OFFSET_EVENT_QUEUED, SAGA_EVENT_CLASSES,
     ENDING_EVENT_CLASSES,
     MAP_DOT_TEXTURE,
@@ -852,16 +852,24 @@ class MapHelper:
         fields = p.read32_many([slots[i] + off for i in used
                                 for off in (0x04, 0x10, 0x18, MAP_POINT_REQ_CAPSULE,
                                             MAP_POINT_LEVEL_MIN, MAP_POINT_TYPE,
-                                            MAP_POINT_REQ_EQUIPPED, 0x0C)])
+                                            MAP_POINT_REQ_EQUIPPED, 0x0C, MAP_POINT_CONDITION,
+                                            MAP_POINT_CONDITION + 4, MAP_POINT_CONDITION + 8)])
         kinds, free, changed = {}, [i for i, code in enumerate(codes) if code in (0, NONE)], 0
         on_map = {}                                         # event -> colour name, for what we placed
         for n, i in enumerate(used):
             code = codes[i]
-            flags, x, z, capsule, level_min, place, equipped, radius = fields[8 * n:8 * n + 8]
+            flags, x, z, capsule, level_min, place, equipped, radius, *condition = \
+                fields[11 * n:11 * n + 11]
             if code in want:
                 words = want.pop(code)
                 if place != words[2]:
                     p.write32(slots[i] + MAP_POINT_TYPE, words[2])
+                if condition != words[8:11]:
+                    # A scene can show a point only while a story variable has
+                    # some value (Piccolo's two Central City talks: one each way).
+                    p.write32_many([(slots[i] + MAP_POINT_CONDITION + 4 * k, words[8 + k])
+                                    for k in range(3)])
+                    changed += 1
                 if radius != words[3]:                      # the game put the point back itself
                     p.write32(slots[i] + 0x0C, words[3])
                     changed += 1
