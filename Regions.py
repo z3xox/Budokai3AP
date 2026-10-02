@@ -128,6 +128,24 @@ DU_CHARACTER_SAGAS_MAP_HELPER = {
         "Saiyan":  ["Yamcha DU - Saibamen (2nd Route)"],
     },
 }
+
+# Saga Locks option: item needed to move on to a saga.
+SAGA_UNLOCK_ITEM = {
+    "Frieza": "Frieza Saga Unlock",
+    "Cell":   "Cell Saga Unlock",
+    "Buu":    "Buu Saga Unlock",
+}
+
+
+def saga_unlocks_needed(char_name: str, saga_name: str = None) -> list:
+    """Saga Unlock items a character needs to reach `saga_name` (default: to reach
+    the end of the story). The saga the story starts in is always open; every
+    later saga, up to the one asked for, needs its item."""
+    sagas = list(DU_CHARACTER_SAGAS[char_name])
+    last = sagas.index(saga_name) if saga_name else len(sagas) - 1
+    return [SAGA_UNLOCK_ITEM[name] for name in sagas[1:last + 1]]
+
+
 CHARACTER_UNLOCK_ITEMS = {
     "Goku":        "Goku DU",
     "Kid Gohan":   "Kid Gohan DU",
@@ -147,6 +165,21 @@ def create_regions(world):
     multiworld = world.multiworld
     player = world.player
     map_helper = bool(world.options.map_helper.value)
+    saga_locks = bool(world.options.saga_locks.value)
+
+    def has_all(items):
+        """Access rule: every item of `items` is held (items may be empty)."""
+        items = [name for name in items if name]
+        return lambda state: all(state.has(name, player) for name in items)
+
+    def story_items(location_char: str) -> list:
+        """A character's DU unlock, plus every Saga Unlock the story needs. Used
+        where the saga is not known (Dragon Balls, wishes, completing the DU)."""
+        char = "Adult Gohan" if location_char == "Gohan" else location_char
+        items = [CHARACTER_UNLOCK_ITEMS.get(char)]
+        if saga_locks and char in DU_CHARACTER_SAGAS:
+            items += saga_unlocks_needed(char)
+        return items
 
     # Menu region
     menu = Region("Menu", player, multiworld)
@@ -224,7 +257,9 @@ def create_regions(world):
             item_name = char_to_item.get(ch)
             loc = B3Location(player, name, loc_id, db_region)
             if item_name:
-                loc.access_rule = (lambda inm: (lambda state: state.has(inm, player)))(item_name)
+                # The balls are spread over a character's sagas and the wish needs
+                # all seven, so with Saga Locks they ask for every saga of the story.
+                loc.access_rule = has_all(story_items(ch))
             db_region.locations.append(loc)
         multiworld.regions.append(db_region)
         menu.connect(db_region)
@@ -241,7 +276,7 @@ def create_regions(world):
         char = name[len("Complete "):]  # e.g. "Kid Gohan DU"
         unlock_item = char if char in CHARACTER_UNLOCK_ITEMS.values() else None
         if unlock_item:
-            loc.access_rule = (lambda inm: (lambda state: state.has(inm, player)))(unlock_item)
+            loc.access_rule = has_all(story_items(char[:-len(" DU")]))
         du_complete_region.locations.append(loc)
     multiworld.regions.append(du_complete_region)
     menu.connect(du_complete_region)
@@ -267,9 +302,11 @@ def create_regions(world):
 
             multiworld.regions.append(region)
 
-            # Connect from menu. Sagas are always open (saga lockout removed);
-            # a DU saga-region only requires owning that character's DU unlock.
+            # Connect from menu. A DU saga-region requires owning that character's
+            # DU unlock and, with Saga Locks, the unlock of every saga the story
+            # passes through to get there (the saga it starts in is always open).
+            needed = [char_unlock]
+            if saga_locks:
+                needed += saga_unlocks_needed(char_name, saga_name)
             entrance = menu.connect(region)
-            entrance.access_rule = (lambda cn: lambda state: (
-                cn is None or state.has(cn, player)
-            ))(char_unlock)
+            entrance.access_rule = has_all(needed)

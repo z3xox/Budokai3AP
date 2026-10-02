@@ -522,6 +522,9 @@ CAPSULE_SHOP_IDS = {
 }
 
 # ─── Saga Unlock Saga IDs ─────────────────────────────────────────────────────
+# Item name -> saga (0 Saiyan, 1 Frieza, 2 Cell, 3 Buu). With the Saga Locks
+# option a character can only move on to a saga once its item is held; the saga
+# a character's story starts in is always open.
 SAGA_UNLOCK_IDS = {
     "Frieza Saga Unlock": 0x01,
     "Cell Saga Unlock":   0x02,

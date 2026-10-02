@@ -92,6 +92,13 @@ class B3World(World):
         for name in skill_names:
             pool.append(create_item(self, name))
 
+
+        # Saga Unlocks, if sagas are locked.
+        if self.options.saga_locks:
+            from .Items import SAGA_UNLOCK_ITEMS
+            for name in SAGA_UNLOCK_ITEMS:
+                pool.append(create_item(self, name))
+
         # Dark Star Dragon Balls (McGuffin goal items), if the goal uses them.
         from .Items import DARK_STAR_BALL_ITEM
         if int(self.options.goal.value) in (1, 2):  # dark_star or both
@@ -187,6 +194,12 @@ class B3World(World):
         self.starting_character = starting_char
 
 
+        # Saga Locks are enforced by the map helper (it is what keeps the player in
+        # a saga), so they cannot work without it.
+        if self.options.saga_locks and not self.options.map_helper:
+            logger.info(f"[B3] {self.player_name}: Saga Locks needs Map Helper — turning it on.")
+            self.options.map_helper.value = 1
+
     def fill_slot_data(self) -> Mapping[str, Any]:
         return {
             "goal":               self.options.goal.value,
@@ -208,6 +221,7 @@ class B3World(World):
             "map_helper":              self.options.map_helper.value,
             "map_free_travel":         self.options.map_free_travel.value,
             "map_item_labels":         self.options.map_item_labels.value,
+            "saga_locks":              self.options.saga_locks.value,
             "death_link":              self.options.death_link.value,
             "seed":               self.multiworld.seed_name,
             "starting_character": getattr(self, "starting_character", "Goku DU"),

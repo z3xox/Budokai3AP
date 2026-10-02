@@ -173,6 +173,14 @@ class MapItemLabels(DefaultOnToggle):
     display_name = "Map Item Labels"
 
 
+class SagaLocks(Toggle):
+    """Lock the Frieza, Cell and Buu sagas behind 'Saga Unlock' items. A character
+    can only move on to a saga once its item is found; the saga a character's story
+    starts in is always open. Needs Map Helper (turned on automatically)."""
+    display_name = "Saga Locks"
+    default = 0
+
+
 class StartingCharacter(Choice):
     """Which Dragon Universe character you start with already unlocked. That
     character's DU unlock is precollected and removed from the item pool (since
@@ -215,4 +223,5 @@ class B3Options(PerGameCommonOptions):
     map_helper: MapHelper
     map_free_travel: MapFreeTravel
     map_item_labels: MapItemLabels
+    saga_locks: SagaLocks
     death_link: DeathLink

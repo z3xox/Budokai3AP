@@ -26,7 +26,7 @@ from .data.MapLocations import INTERACT_BY_EVENT
 from .data.Constants import (
     FIGHT_LOCATIONS, ROSTER, STAGES, CAPSULE_SHOP_IDS, DL_LOSS_CONFIRM_SECS,
     DL_ARENA_AWAY_POLLS, DU_MODE,
-    DU_BASES,
+    DU_BASES, SAGA_UNLOCK_IDS,
 )
 
 
@@ -612,6 +612,10 @@ class B3Context(CommonContext):
             self.granted_capsules.add(capsule_name)
             self.iface.grant_item_capsule(capsule_name)
             logger.info(f"[B3] Capsule granted: {capsule_name}")
+
+        elif name in SAGA_UNLOCK_IDS:
+            self.unlocked_sagas.add(SAGA_UNLOCK_IDS[name])
+            logger.info(f"[B3] {name} received — the saga is open on the map.")
 
         elif name == "Dragon Arena Ticket":
             self.da_ticket = True

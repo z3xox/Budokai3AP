@@ -53,6 +53,14 @@ SPECIAL_ITEMS = {
     "Dragon Arena Rank Up":  B3_BASE_ID + 0x302,
 }
 
+# ─── Saga Unlocks (Saga Locks option) ────────────────────────────────────────
+# Held = any character may move on to that saga. Only in the pool with Saga Locks.
+SAGA_UNLOCK_ITEMS = {
+    "Frieza Saga Unlock": B3_BASE_ID + 0x320,
+    "Cell Saga Unlock":   B3_BASE_ID + 0x321,
+    "Buu Saga Unlock":    B3_BASE_ID + 0x322,
+}
+
 # ─── Dark Star Dragon Ball (McGuffin goal item) ──────────────────────────────
 # A single named progression item placed in the pool `dark_star_balls_total`
 # times; collect `dark_star_balls_required` to satisfy the McGuffin goal.
@@ -86,6 +94,7 @@ item_table.update(CHARACTER_ITEMS)
 item_table.update(CAPSULE_ITEMS)
 item_table.update(TRAP_ITEMS)
 item_table.update(SPECIAL_ITEMS)
+item_table.update(SAGA_UNLOCK_ITEMS)
 item_table.update(MCGUFFIN_ITEMS)
 item_table.update(ITEM_CAPSULE_ITEMS)
 
@@ -96,7 +105,7 @@ def get_item_classification(name: str) -> ItemClassification:
     # the generator can't sphere them and gated locations break).
     if name in ("Dragon Arena Ticket", "Dragon Arena Rank Up", "Shop Restock"):
         return ItemClassification.progression
-    if name in MCGUFFIN_ITEMS:
+    if name in MCGUFFIN_ITEMS or name in SAGA_UNLOCK_ITEMS:
         return ItemClassification.progression
     if name in ITEM_CAPSULE_ITEMS:
         return ItemClassification.filler
