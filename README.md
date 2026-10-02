@@ -31,14 +31,14 @@ Dragon Universe fights, the Skill Shop, character unlocks, and skill capsules be
 | `required_du_completions` | 1 | DU campaigns needed to win (1–11) |
 | `dragonsanity` | all | `all`: every Dragon Ball picked up (77) and each character's Shenron wish (11) is a check. `wishes`: only the wishes; a pickup just gives the ball. `off`: neither |
 | `dragon_arena_fights` | 0 | Dragon Arena fights (0–380) |
-| `map_helper` | false | Show every interaction on the Dragon Universe map and move between chapters / sagas with markers (see below). Adds 28 fights as checks |
+| `map_helper` | true | Show every interaction on the Dragon Universe map and move between chapters / sagas with markers (see below). Adds 28 fights as checks |
 | `map_free_travel` | false | With `map_helper`: off = the next-chapter / next-saga marker only appears once you beat the fight that opens it. On = always there, so story fights can be skipped |
 | `map_item_labels` | true | With `map_helper`: hovering over a map point shows the Archipelago item waiting there and who it is for (plum = progression, blue = useful, cyan = filler, salmon = trap), and what each marker does |
 | `shop_item_labels` | true | The Skill Shop's list shows the Archipelago item each capsule sends and who it is for, coloured like the map labels |
-| `saga_locks` | false | Frieza, Cell and Buu sagas need a `Saga Unlock` item to move on to (turns `map_helper` on) |
+| `saga_locks` | true | Frieza, Cell and Buu sagas need a `Saga Unlock` item to move on to (needs `map_helper`; off whenever it is off) |
 | `fighter_unlocks` | true | The 27 fighters without a Dragon Universe (Frieza, Cell, Trunks...) are `Fighter` items; locked in every mode until found |
 | `extra_skills` | true | Every other skill capsule (187: the other fighters' skills and Breakthroughs, fusion forms, the remaining DU character skills) becomes an item, as far as there is room |
-| `interactsanity` | off | Visiting map points sends checks: `items` (204 pickups), `talks` (312 talk scenes) or `both` (turns `map_helper` on) |
+| `interactsanity` | both | Visiting map points sends checks: `items` (204 pickups), `talks` (312 talk scenes) or `both` (needs `map_helper`; off whenever it is off) |
 
 ## Map helper
 With `map_helper` on, the Dragon Universe map shows everything the current chapter has to offer, each with an overworld marker and a coloured dot on the overview map:

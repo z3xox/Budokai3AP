@@ -162,7 +162,7 @@ class MapHelper(Toggle):
     Also adds 28 fights as locations that are otherwise only reachable on a
     second playthrough or an alternate route."""
     display_name = "Map Helper"
-    default = 0
+    default = 1
 
 
 class MapFreeTravel(Toggle):
@@ -193,9 +193,9 @@ class ShopItemLabels(DefaultOnToggle):
 class SagaLocks(Toggle):
     """Lock the Frieza, Cell and Buu sagas behind 'Saga Unlock' items. A character
     can only move on to a saga once its item is found; the saga a character's story
-    starts in is always open. Needs Map Helper (turned on automatically)."""
+    starts in is always open. Needs Map Helper: off whenever Map Helper is off."""
     display_name = "Saga Locks"
-    default = 0
+    default = 1
 
 
 class Interactsanity(Choice):
@@ -206,14 +206,14 @@ class Interactsanity(Choice):
       items = item pickups, the yellow dots (204)
       talks = talk scenes, the green dots (312)
       both  = items and talks (516)
-    Needs Map Helper (turned on automatically): many of these points are hidden
-    or need a second playthrough without it."""
+    Needs Map Helper (off whenever Map Helper is off): many of these points are
+    hidden or need a second playthrough without it."""
     display_name = "Interactsanity"
     option_off = 0
     option_items = 1
     option_talks = 2
     option_both = 3
-    default = 0
+    default = 3
 
 
 class FighterUnlocks(DefaultOnToggle):

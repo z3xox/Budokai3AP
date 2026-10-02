@@ -220,12 +220,14 @@ class B3World(World):
 
         # Saga Locks are enforced by the map helper (it is what keeps the player in
         # a saga), and Interactsanity relies on it to make every point reachable, so
-        # neither can work without it.
+        # neither can work without it. All three are on by default: turning the map
+        # helper off turns the other two off with it.
         for option, label in ((self.options.saga_locks, "Saga Locks"),
                               (self.options.interactsanity, "Interactsanity")):
             if option.value and not self.options.map_helper:
-                logger.info(f"[B3] {self.player_name}: {label} needs Map Helper — turning it on.")
-                self.options.map_helper.value = 1
+                logger.info(f"[B3] {self.player_name}: {label} needs Map Helper, which is off — "
+                            f"turning {label} off.")
+                option.value = 0
 
 
     def fill_slot_data(self) -> Mapping[str, Any]:
