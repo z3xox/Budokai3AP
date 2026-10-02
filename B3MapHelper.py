@@ -115,6 +115,8 @@ def free_spot(points, avoid=()):
     return max(cells, key=lambda c: min((c[0] - x) ** 2 + (c[1] - z) ** 2 for x, z in taken))
 
 
+SMALL_RADIUS = 500           # the smallest radius that works as the game has it
+USUAL_RADIUS = 1000
 WORLD_SCENE_DONOR = 0x00     # Goku: his saga-ending scenes all change the world
 
 
@@ -142,11 +144,18 @@ def previous_saga(sagas: dict, char_id: int, block: int):
     return (ending << 16) | (char_id if goes_on else WORLD_SCENE_DONOR), start, prev
 
 
+def point_radius(pt) -> int:
+    """How close the player has to be. Height counts, and one point (a hidden
+    spot in Teen Gohan's Cell saga, radius 250 at ground level) is so small
+    that flying over it never reaches it: it gets the usual size."""
+    return pt.radius if pt.radius >= SMALL_RADIUS else USUAL_RADIUS
+
+
 def point_words(pt, x, z, place_type=None) -> list:
     """The 16 words of a point table entry, with no capsule or level requirement.
     `place_type` replaces the point's own location type (see MapHelper._label)."""
     return [pt.code, pt.flags, pt.type if place_type is None else place_type,
-            f2w(pt.radius), f2w(x), f2w(pt.y), f2w(z),
+            f2w(point_radius(pt)), f2w(x), f2w(pt.y), f2w(z),
             0, NONE, 0, 0, NONE, NONE, NONE, 100, 0]
 
 
@@ -843,16 +852,19 @@ class MapHelper:
         fields = p.read32_many([slots[i] + off for i in used
                                 for off in (0x04, 0x10, 0x18, MAP_POINT_REQ_CAPSULE,
                                             MAP_POINT_LEVEL_MIN, MAP_POINT_TYPE,
-                                            MAP_POINT_REQ_EQUIPPED)])
+                                            MAP_POINT_REQ_EQUIPPED, 0x0C)])
         kinds, free, changed = {}, [i for i, code in enumerate(codes) if code in (0, NONE)], 0
         on_map = {}                                         # event -> colour name, for what we placed
         for n, i in enumerate(used):
             code = codes[i]
-            flags, x, z, capsule, level_min, place, equipped = fields[7 * n:7 * n + 7]
+            flags, x, z, capsule, level_min, place, equipped, radius = fields[8 * n:8 * n + 8]
             if code in want:
                 words = want.pop(code)
                 if place != words[2]:
                     p.write32(slots[i] + MAP_POINT_TYPE, words[2])
+                if radius != words[3]:                      # the game put the point back itself
+                    p.write32(slots[i] + 0x0C, words[3])
+                    changed += 1
                 if capsule != NONE:                         # second-play / capsule lock
                     p.write32(slots[i] + MAP_POINT_REQ_CAPSULE, NONE)
                 if equipped != NONE:
