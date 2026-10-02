@@ -35,7 +35,10 @@ from .data.Constants import (
     SHOP_PURCHASE_BASE, SHOP_PURCHASE_BY_DISPLAY,
     SCREEN_DA_ENTRANCE, SCREEN_DA_CHARSEL, SCREEN_DA_BATTLE,
     SCREEN_DA_RESULTS, SCREEN_DA_SAVE,
-    DA_TICKET_DISPLAY, DA_TICKET_OWNERSHIP, DA_TICKET_DU_RT,
+    DA_TICKET_DISPLAY, DA_TICKET_OWNERSHIP, DA_TICKET_DU_RT, DA_MENU_FLAG,
+    SCREEN_MAIN_MENU, ADDR_SYSTEM_TASK, ADDR_MENU_MANAGER, ADDR_MENU_CLOSED, ADDR_MENU_FADED,
+    ADDR_MENU_TARGET, ADDR_MENU_NEXT, MENU_STEP_IDLE, MENU_STEP_PICKED, MENU_STEP_LEAVE,
+    MENU_STEP_ENTER, MENU_STEP_BUILD, MENU_STEP_FINISH, MENU_TASK_IDLE, MENU_OBJECT_ARENA,
     ADDR_DA_OPP_COUNT, ADDR_DA_CLEAR_BASE, DA_FIGHT_COUNT,
     DRAGON_BALL_ADDRS, SCREEN_SHENRON,
     OFFSET_BATTLE, OFFSET_SAGA, OFFSET_BATTLE_COMP, OFFSET_LEVEL, OFFSET_EXP,
@@ -1111,6 +1114,91 @@ class B3Interface:
         self.pine.write8(DA_TICKET_DISPLAY, 0x01)
         self.pine.write8(DA_TICKET_OWNERSHIP, 0x01)
         self.pine.write8(DA_TICKET_DU_RT, 0x01)
+
+    def set_dragon_arena_menu(self, available: bool):
+        """Tell the main menu whether to offer Dragon Arena. The menu is built
+        from this byte each time it is entered, so the change shows the next
+        time the player arrives there (from the shop, Options, the title...).
+        If the player is sitting on the main menu, the menu is rebuilt on the
+        spot. Safe on any screen. NTSC-U only."""
+        if getattr(self, "_crc", "") != GAME_CRC:
+            return
+        value = 0x01 if available else 0x00
+        if self.pine.read8(DA_MENU_FLAG) != value:
+            self.pine.write8(DA_MENU_FLAG, value)
+        menu = self._idle_main_menu()
+        if menu and self.pine.read8(menu + MENU_OBJECT_ARENA) != value:
+            self.rebuild_main_menu()
+
+    def _idle_main_menu(self):
+        """The main menu object, if the menu is on screen and waiting for input
+        (nothing picked, nothing animating); else None."""
+        def pointer(value):
+            return value if 0x00100000 <= value < 0x02000000 else 0
+        p = self.pine
+        if p.read16(ADDR_SCREEN) != SCREEN_MAIN_MENU:
+            return None
+        system, manager = (pointer(v) for v in p.read32_many([ADDR_SYSTEM_TASK, ADDR_MENU_MANAGER]))
+        if not system or not manager:
+            return None
+        step, target = p.read32_many([system + 0x1C, ADDR_MENU_TARGET])
+        if step != MENU_STEP_IDLE or target != 0xFFFFFFFF:
+            return None
+        task = pointer(p.read32(manager + 0x10))
+        if not task or p.read32(task + 0x1C) != MENU_TASK_IDLE:
+            return None
+        return pointer(p.read32(task + 0x30)) or None
+
+    def rebuild_main_menu(self) -> bool:
+        """Make the game build the main menu again while the player is on it.
+
+        Nothing is called from outside: the game's own steps for leaving a
+        screen and entering one are walked through, with the main menu as the
+        destination, by giving each step the signal it waits for. The game tears
+        the menu down and builds it again, picking up DA_MENU_FLAG. Only done
+        from the idle menu; takes a few frames."""
+        p = self.pine
+        if not self._idle_main_menu():
+            return False
+        step = p.read32(ADDR_SYSTEM_TASK) + 0x1C
+
+        def reached(condition, what, timeout=1.0):
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                if condition():
+                    return True
+                time.sleep(0.005)
+            self.logger.warning(f"[B3] Main menu rebuild stopped: no {what} "
+                                f"(step 0x{p.read32(step):08X}).")
+            return False
+
+        p.write32(ADDR_MENU_TARGET, SCREEN_MAIN_MENU)      # as if the menu itself had been picked
+        if not reached(lambda: p.read32(step) == MENU_STEP_PICKED, "pick"):
+            return False
+        p.write32(ADDR_MENU_FADED, 1)
+        if not reached(lambda: p.read32(step) == MENU_STEP_LEAVE, "leave"):
+            return False
+        p.write32(ADDR_MENU_CLOSED, 1)
+        if not reached(lambda: p.read32(ADDR_MENU_MANAGER) == 0
+                       and p.read32(ADDR_MENU_CLOSED) == 0, "teardown"):
+            return False
+        p.write32(ADDR_MENU_TARGET, SCREEN_MAIN_MENU)
+        p.write32(step, MENU_STEP_ENTER)
+        if not reached(lambda: p.read32(step) == MENU_STEP_BUILD
+                       and p.read32(ADDR_MENU_MANAGER) != 0, "load"):
+            return False
+        time.sleep(0.3)                                    # let the menu's files arrive
+        p.write32(ADDR_MENU_FADED, 1)
+        if not reached(lambda: p.read32(step) == MENU_STEP_FINISH, "build"):
+            return False
+        # The last step would also clean up the screen that was left (the Dragon
+        # Universe title on the game's own route), which is not there: go idle by hand.
+        p.write32_many([(ADDR_MENU_TARGET, 0xFFFFFFFF), (ADDR_MENU_NEXT, 0xFFFFFFFF),
+                        (ADDR_MENU_FADED, 0), (ADDR_MENU_CLOSED, 0)])
+        p.write16(ADDR_SCREEN, SCREEN_MAIN_MENU)
+        p.write32(step, MENU_STEP_IDLE)
+        self.logger.info("[B3] Main menu rebuilt.")
+        return True
 
     def lock_dragon_arena(self):
         """Write 0 to the 3 ticket tables to keep the mode locked."""

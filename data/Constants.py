@@ -992,6 +992,36 @@ SCREEN_DA_SAVE     = 0x061B
 DA_TICKET_DISPLAY   = 0x0049579D  # GHE display
 DA_TICKET_OWNERSHIP = 0x005512F1  # Real-Time ownership
 DA_TICKET_DU_RT     = 0x004C713D  # DU Real-Time
+# What the main menu goes by (NTSC-U). Granting a capsule in the game runs a
+# routine (0x271B40) that keeps a block of unlock state at 0x46A5B0 up to date;
+# for the ticket (capsule 0x204) it sets this byte. The menu is built from it
+# every time the main menu is entered (setup routine 0x26B150: seven entries
+# with the arena, six without) and not looked at again until the next visit.
+# The game only recomputes the byte from the tables above when Dragon Universe
+# is left, so the client sets it itself.
+DA_MENU_FLAG        = 0x0046A659
+
+# Rebuilding the main menu in place (NTSC-U). The system task (pointer at
+# ADDR_SYSTEM_TASK, current step at +0x1C) walks through fixed steps; each waits
+# for a word before handing over to the next. Leaving the menu and entering it
+# again with the menu itself as the destination makes the game tear the menu
+# down and build it afresh, reading DA_MENU_FLAG as it does.
+SCREEN_MAIN_MENU    = 0x0005
+ADDR_SYSTEM_TASK    = 0x004281E0   # -> task; +0x1C = the step it is running
+ADDR_MENU_MANAGER   = 0x00428384   # -> main menu manager (0 = no menu); [+0x10] its task,
+                                   # [task+0x1C] the menu's own step, [task+0x30] the menu object
+ADDR_MENU_CLOSED    = 0x004281E8   # set by a screen once it has closed
+ADDR_MENU_FADED     = 0x004281EC   # set by a screen once it has faded out
+ADDR_MENU_TARGET    = 0x004281F0   # screen to go to (-1 = none)
+ADDR_MENU_NEXT      = 0x004281F4   # screen to go to after that (-1 = none)
+MENU_STEP_IDLE      = 0x001F0DF0   # main menu on screen, waiting for a pick
+MENU_STEP_PICKED    = 0x001F0BD0   # a pick was made; waits for the fade
+MENU_STEP_LEAVE     = 0x001F0960   # waits for the close, then tears the menu down
+MENU_STEP_ENTER     = 0x001F0820   # loads the files of the target screen
+MENU_STEP_BUILD     = 0x001F06C0   # waits for the fade, then builds the target screen
+MENU_STEP_FINISH    = 0x001F0540   # waits for the close of the screen that was left
+MENU_TASK_IDLE      = 0x0026A8D0   # the menu's own step while it waits for input
+MENU_OBJECT_ARENA   = 0x98         # menu object: built with the Dragon Arena entry
 
 # Opponent list count — clamp to gate how many arena fights are visible
 ADDR_DA_OPP_COUNT = 0x0089080C   # 32-bit; = 0x84 (132) at Lv.1-30 default

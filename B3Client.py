@@ -664,7 +664,8 @@ class B3Context(CommonContext):
         elif name == "Dragon Arena Ticket":
             self.da_ticket = True
             self.iface.unlock_dragon_arena()
-            logger.info("[B3] Dragon Arena Ticket received — mode unlocked.")
+            self.iface.set_dragon_arena_menu(True)
+            logger.info("[B3] Dragon Arena Ticket received — Dragon Arena is on the main menu.")
 
         elif name == "Dragon Arena Rank Up":
             self.da_rank_ups += 1
@@ -1611,6 +1612,9 @@ async def pcsx2_sync_task(ctx: B3Context):
             if ctx._lock_reapply_counter >= 50:  # every ~5 seconds
                 ctx._lock_reapply_counter = 0
                 ctx.iface.apply_character_locks(ctx.unlocked_characters)
+                # Dragon Arena on the main menu follows the ticket (any screen)
+                if ctx.da_fights_total > 0:
+                    ctx.iface.set_dragon_arena_menu(ctx.da_ticket)
                 # Gate skills: only on DU world map (0x0108) or shop (0x0016)
                 scr = ctx.iface.get_screen()
                 if scr in (0x0108, 0x0016):
