@@ -1089,6 +1089,15 @@ class B3Context(CommonContext):
         self._shop_pool_built = True
         logger.info(f"[B3] Shop pool built: {len(self.shop_pool)} capsules (fixed order)")
 
+    def _shop_bought(self, pool_idx: int) -> bool:
+        """Was this capsule bought? Seen this session, or its check is already on
+        the server (the client does not remember purchases across restarts)."""
+        if pool_idx in self.shop_purchased:
+            return True
+        from .Locations import location_table
+        loc_id = location_table.get(f"Shop: {self.shop_pool[pool_idx][2]}")
+        return loc_id is not None and loc_id in self.checked_locations
+
     def _visible_shop_entries(self):
         """
         Return the up-to-10 capsules currently shown in the shop:
@@ -1097,7 +1106,7 @@ class B3Context(CommonContext):
         """
         unlocked_size = (self.restocks_received + 1) * 10
         available = [(i, entry) for i, entry in enumerate(self.shop_pool[:unlocked_size])
-                     if i not in self.shop_purchased]
+                     if not self._shop_bought(i)]
         return available[:10]   # list of (pool_index, (disp, own, name))
 
     def _refresh_shop(self):
@@ -1345,7 +1354,7 @@ class B3Context(CommonContext):
         # Collect every visible slot whose owned-quantity rose above baseline.
         increased = []
         for pool_idx in list(vis_indices):
-            if pool_idx in self.shop_purchased:
+            if self._shop_bought(pool_idx):
                 continue
             disp_idx, own_idx, name = self.shop_pool[pool_idx]
             cur = self.iface.read_capsule_owned(own_idx, disp_idx)
