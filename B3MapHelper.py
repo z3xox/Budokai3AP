@@ -236,9 +236,6 @@ class Saga:
             self.chapter_of_scene[code] = chapter
         self.fight_codes = {p.code for p in self.points
                             if (p.fight or p.starts_fight) and (p.code >> 16) // 100 != 24}
-        # what each fight queues for after the battle. The game keeps it queued for
-        # the whole fight, and the rest of the client knows the fight by it.
-        self.fight_nexts = {p.next for p in self.points if p.fight and p.next is not None}
         # points whose fight, once won, ends the saga
         self.enders = set(data.get("enders", ()))
         # saga exit (next saga) and the way back
@@ -751,10 +748,13 @@ class MapHelper:
         for addr, code in zip(addrs, p.read32_many(addrs)):
             if code == NONE:
                 continue
-            if code in saga.fight_nexts and not self._after_win:
+            fighting = saga.by_code.get(self.current_fight) if self.current_fight is not None else None
+            if fighting is not None and code == fighting.next and not self._after_win:
                 # A fight that leads straight to the saga's end (Tien's Nappa,
-                # Piccolo's last on Namek) has it queued from the start: it is
-                # only taken out once the fight is won.
+                # Piccolo's last on Namek) has it queued from the start, and the
+                # rest of the client knows the fight by it: it is only taken out
+                # once the fight is won. (Only for the fight being fought: the
+                # same event queued by a scene after another fight is held as usual.)
                 continue
             if (code >> 16) in ENDING_EVENT_CLASSES:
                 if self._ending_ok:
